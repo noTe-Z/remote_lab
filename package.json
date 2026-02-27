@@ -48,6 +48,7 @@
     "claude-ttyd-session",
     "lib/",
     "templates/",
+    "static/",
     "LICENSE",
     "README.md",
     "docs/"

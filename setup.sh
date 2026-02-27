@@ -52,7 +52,7 @@ MODE_CHOICE=${MODE_CHOICE:-1}
 
 if [[ "$MODE_CHOICE" == "2" ]]; then
     USE_CLOUDFLARE=false
-    print_success "Mode: Localhost only (http://localhost:7681)"
+    print_success "Mode: Localhost only (http://127.0.0.1:7681)"
 else
     USE_CLOUDFLARE=true
     print_success "Mode: Cloudflare HTTPS"
@@ -278,10 +278,11 @@ if [[ "$USE_CLOUDFLARE" == true ]]; then
     cat > "$HOME/.cloudflared/config.yml" << EOF
 tunnel: $TUNNEL_NAME
 credentials-file: $HOME/.cloudflared/$TUNNEL_ID.json
+protocol: http2
 
 ingress:
   - hostname: $FULL_DOMAIN
-    service: http://localhost:7681
+    service: http://127.0.0.1:7681
   - service: http_status:404
 EOF
     print_success "Created: ~/.cloudflared/config.yml"
@@ -324,7 +325,13 @@ mkdir -p "\$SOCKET_DIR"
 SOCKET="\$SOCKET_DIR/\$SESSION_NAME.dtach"
 
 cd "\$WORK_DIR"
-exec dtach -A "\$SOCKET" -Ez "\$TOOL_CMD"
+
+# Claude Code: use dangerously-skip-permissions for remote terminal convenience
+if [ "\$TOOL_CMD" = "claude" ]; then
+    exec dtach -A "\$SOCKET" -Ez claude --dangerously-skip-permissions
+else
+    exec dtach -A "\$SOCKET" -Ez "\$TOOL_CMD"
+fi
 EOF
 
 chmod +x "$SCRIPT_DIR/claude-ttyd-session"
@@ -351,6 +358,8 @@ if [[ "$USE_CLOUDFLARE" == true ]]; then
     <string>com.authproxy.claude</string>
     <key>ProgramArguments</key>
     <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
         <string>$(which node)</string>
         <string>$SCRIPT_DIR/auth-proxy.mjs</string>
     </array>
@@ -510,7 +519,7 @@ else
 # Generated: $(date)
 # Mode: Localhost only (no Cloudflare)
 
-Access URL: http://localhost:7681/?token=$ACCESS_TOKEN
+Access URL: http://127.0.0.1:7681/?token=$ACCESS_TOKEN
 
 # Configuration Files:
 - auth-proxy service: ~/Library/LaunchAgents/com.authproxy.claude.plist
@@ -604,7 +613,7 @@ if [[ "$USE_CLOUDFLARE" == true ]]; then
 else
     echo -e "${GREEN}✓ Claude Code is now accessible locally!${NC}"
     echo ""
-    echo "Access URL: ${BLUE}http://localhost:7681/?token=$ACCESS_TOKEN${NC}"
+    echo "Access URL: ${BLUE}http://127.0.0.1:7681/?token=$ACCESS_TOKEN${NC}"
     echo ""
     print_warning "SAVE THIS URL! It's also in: $SCRIPT_DIR/credentials.txt"
     echo ""

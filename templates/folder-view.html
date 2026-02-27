@@ -2,8 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>{{FOLDER_PATH_HTML}} // Remote</title>
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
@@ -538,6 +543,66 @@
       .touch-scroll-overlay { display: block; }
     }
 
+    /* Mobile input bar */
+    .mobile-input-bar { display: none; }
+
+    @media (max-width: 768px) {
+      .mobile-input-bar {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--bg-dark);
+        border-top: 1px solid rgba(0, 255, 65, 0.3);
+        padding: 6px 8px;
+        gap: 6px;
+        z-index: 1001;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .mobile-input-bar input {
+        flex: 1;
+        min-width: 0;
+        padding: 10px 12px;
+        background: var(--bg-black);
+        border: 1px solid rgba(0, 255, 65, 0.3);
+        border-radius: 8px;
+        color: var(--terminal-cyan);
+        font-size: 16px;
+        font-family: 'JetBrains Mono', monospace;
+        outline: none;
+      }
+
+      .mobile-input-bar input:focus {
+        border-color: var(--terminal-cyan);
+        box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+      }
+
+      .mobile-input-bar input::placeholder {
+        color: rgba(0, 255, 65, 0.3);
+      }
+
+      .mobile-input-bar button {
+        flex-shrink: 0;
+        width: 44px;
+        background: var(--terminal-green);
+        border: none;
+        border-radius: 8px;
+        color: var(--bg-black);
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .mobile-input-bar button:active {
+        opacity: 0.7;
+        transform: scale(0.92);
+      }
+    }
+
     /* Mobile keyboard toolbar */
     .mobile-keyboard-toolbar { display: none; }
 
@@ -634,6 +699,12 @@
 
       <!-- Scroll to Bottom Button -->
       <button id="scroll-bottom-btn" class="scroll-bottom-btn" title="Go to bottom">&darr;</button>
+
+      <!-- Mobile Input Bar -->
+      <div class="mobile-input-bar">
+        <input type="text" id="mobile-input" placeholder="Type or speak here..." autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="false" enterkeyhint="send">
+        <button id="mobile-send-btn" title="Send">&#9654;</button>
+      </div>
 
       <!-- Mobile Keyboard Toolbar -->
       <div class="mobile-keyboard-toolbar">
@@ -1299,18 +1370,31 @@
       } catch (err) {}
     }
 
-    document.getElementById('scroll-bottom-btn').addEventListener('click', function() {
+    var scrollBtnEl = document.getElementById('scroll-bottom-btn');
+    // Use touchstart + preventDefault to avoid stealing focus from keyboard input
+    scrollBtnEl.addEventListener('touchstart', function(e) {
+      e.preventDefault(); // prevents blur on the keyboard proxy input
       try {
         var iframe = document.getElementById('terminal-iframe');
         if (!iframe) return;
         var term = iframe.contentWindow.term;
         if (term && typeof term.scrollToBottom === 'function') {
           term.scrollToBottom();
-          document.getElementById('scroll-bottom-btn').classList.remove('visible');
+          scrollBtnEl.classList.remove('visible');
         }
-      } catch (err) {
-        console.error('Failed to scroll to bottom:', err);
-      }
+      } catch (err) {}
+    }, { passive: false });
+    // Desktop fallback
+    scrollBtnEl.addEventListener('click', function() {
+      try {
+        var iframe = document.getElementById('terminal-iframe');
+        if (!iframe) return;
+        var term = iframe.contentWindow.term;
+        if (term && typeof term.scrollToBottom === 'function') {
+          term.scrollToBottom();
+          scrollBtnEl.classList.remove('visible');
+        }
+      } catch (err) {}
     });
 
     // ── Mobile Keyboard Toolbar ──
@@ -1329,6 +1413,13 @@
         'shift-tab': '\x1b[Z',
         'shift-enter': '\n'
       };
+
+      // Prevent touchstart from stealing focus (keeps keyboard open)
+      toolbar.addEventListener('touchstart', function(e) {
+        if (e.target.closest('button')) {
+          e.preventDefault();
+        }
+      }, { passive: false });
 
       toolbar.addEventListener('click', function(e) {
         var button = e.target.closest('button');
@@ -1350,11 +1441,50 @@
           if (term && typeof term.input === 'function') {
             term.input(sequence);
           }
-        } catch (err) {
-          console.error('Failed to send key to terminal:', err);
-        }
+        } catch (err) {}
 
         e.preventDefault();
+      });
+    })();
+
+    // ── Mobile Input Bar ──
+
+    (function initMobileInputBar() {
+      var mobileInput = document.getElementById('mobile-input');
+      var sendBtn = document.getElementById('mobile-send-btn');
+      if (!mobileInput || !sendBtn) return;
+
+      function sendInput() {
+        var text = mobileInput.value;
+        if (!text) return;
+        try {
+          var iframe = document.getElementById('terminal-iframe');
+          if (!iframe) return;
+          var term = iframe.contentWindow.term;
+          if (term && typeof term.input === 'function') {
+            term.input(text);
+          }
+        } catch (err) {}
+        mobileInput.value = '';
+        // Return focus to terminal so user can manually press Enter
+        try {
+          var iframe = document.getElementById('terminal-iframe');
+          if (iframe && iframe.contentWindow.term) {
+            iframe.contentWindow.term.focus();
+          }
+        } catch (err) {}
+      }
+
+      sendBtn.addEventListener('click', function() {
+        sendInput();
+      });
+
+      // Send on Enter key
+      mobileInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.isComposing) {
+          e.preventDefault();
+          sendInput();
+        }
       });
     })();
 
@@ -1468,6 +1598,7 @@
         var touchDistance = Math.abs(lastY - touchStartY);
 
         if (touchDistance < 10 && touchDuration < 300) {
+          // Tap on terminal → focus terminal (keyboard proxy)
           if (typeof window.focusKeyboardProxy === 'function') {
             window.focusKeyboardProxy();
             e.preventDefault();
@@ -1583,53 +1714,72 @@
       if (window.visualViewport) {
         var mainContainer = document.getElementById('main-container');
         var keyboardToolbar = document.querySelector('.mobile-keyboard-toolbar');
+        var mobileInputBar = document.querySelector('.mobile-input-bar');
         var scrollBottomBtn = document.getElementById('scroll-bottom-btn');
-        var topToolbarHeight = 90; // toolbar + tab bar
         var keyboardThreshold = 100;
         var rafId = null;
         var settleTimer = null;
 
-        function applyLayout() {
-          var savedViewportY = null;
+        function getTopToolbarHeight() {
+          var toolbar = document.querySelector('.toolbar');
+          var tabBar = document.getElementById('tab-bar');
+          return (toolbar ? toolbar.offsetHeight : 50) + (tabBar ? tabBar.offsetHeight : 40);
+        }
+
+        function triggerIframeResize() {
+          try {
+            var termIframe = document.getElementById('terminal-iframe');
+            if (termIframe && termIframe.contentWindow) {
+              termIframe.contentWindow.dispatchEvent(new Event('resize'));
+            }
+          } catch (e) {}
+        }
+
+        function scrollTerminalToBottom() {
           try {
             var termIframe = document.getElementById('terminal-iframe');
             var term = termIframe && termIframe.contentWindow && termIframe.contentWindow.term;
-            if (term && term.buffer && term.buffer.active) {
-              savedViewportY = term.buffer.active.viewportY;
+            if (term && typeof term.scrollToBottom === 'function') {
+              term.scrollToBottom();
             }
           } catch (e) {}
+        }
 
+        var wasKeyboardOpen = false;
+
+        function applyLayout() {
           var vvHeight = window.visualViewport.height;
-          var fullHeight = window.innerHeight;
-          var keyboardHeight = fullHeight - vvHeight;
+          var layoutHeight = document.documentElement.clientHeight;
+          var keyboardHeight = layoutHeight - vvHeight - (window.visualViewport.offsetTop || 0);
           var keyboardOpen = keyboardHeight > keyboardThreshold;
 
           document.body.classList.toggle('keyboard-open', keyboardOpen);
 
           if (keyboardOpen) {
+            var topH = getTopToolbarHeight();
             var toolbarH = keyboardToolbar ? keyboardToolbar.offsetHeight : 0;
-            var available = vvHeight - topToolbarHeight - toolbarH;
-            mainContainer.style.height = available + 'px';
+            var inputBarH = mobileInputBar ? mobileInputBar.offsetHeight : 0;
+            var bottomBarsH = toolbarH + inputBarH;
+            var available = vvHeight - topH - bottomBarsH;
+            mainContainer.style.height = Math.max(available, 100) + 'px';
+            // Stack: keyboard → key toolbar → input bar (from bottom up)
             if (keyboardToolbar) keyboardToolbar.style.bottom = keyboardHeight + 'px';
+            if (mobileInputBar) mobileInputBar.style.bottom = (keyboardHeight + toolbarH) + 'px';
             if (scrollBottomBtn) scrollBottomBtn.style.bottom = '8px';
           } else {
             mainContainer.style.height = '';
             if (keyboardToolbar) keyboardToolbar.style.bottom = '';
+            if (mobileInputBar) mobileInputBar.style.bottom = '';
             if (scrollBottomBtn) scrollBottomBtn.style.bottom = '';
           }
 
-          if (savedViewportY !== null) {
-            requestAnimationFrame(function() {
-              try {
-                var termIframe = document.getElementById('terminal-iframe');
-                var term = termIframe && termIframe.contentWindow && termIframe.contentWindow.term;
-                if (term && term.buffer && term.buffer.active) {
-                  var delta = savedViewportY - term.buffer.active.viewportY;
-                  if (delta !== 0) term.scrollLines(delta);
-                }
-              } catch (e) {}
-            });
+          triggerIframeResize();
+
+          // Auto-scroll to bottom when keyboard opens or while open
+          if (keyboardOpen) {
+            setTimeout(scrollTerminalToBottom, 50);
           }
+          wasKeyboardOpen = keyboardOpen;
         }
 
         function scheduleLayout() {
@@ -1642,7 +1792,7 @@
           settleTimer = setTimeout(function() {
             settleTimer = null;
             applyLayout();
-          }, 350);
+          }, 400);
         }
 
         window.visualViewport.addEventListener('resize', scheduleLayout);

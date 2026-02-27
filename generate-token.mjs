@@ -31,6 +31,6 @@ if (domain) {
   console.log(`\nAccess URL:`);
   console.log(`  https://${domain}/?token=${token}`);
 } else {
-  console.log(`\nAccess URL (localhost):`);
-  console.log(`  http://localhost:7681/?token=${token}`);
+  console.log(`\nAccess URL (local):`);
+  console.log(`  http://127.0.0.1:7681/?token=${token}`);
 }

@@ -26,8 +26,8 @@ function shutdown() {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-server.listen(LISTEN_PORT, 'localhost', async () => {
-  console.log(`Auth proxy listening on http://localhost:${LISTEN_PORT}`);
+server.listen(LISTEN_PORT, '127.0.0.1', async () => {
+  console.log(`Auth proxy listening on http://127.0.0.1:${LISTEN_PORT}`);
   console.log(`Cookie mode: ${SECURE_COOKIES ? 'Secure (HTTPS)' : 'Non-secure (localhost)'}`);
 
   // Respawn ttyd for all existing sessions
