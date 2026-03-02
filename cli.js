@@ -34,6 +34,7 @@ Usage:
   remotelab server                   Run auth proxy in foreground
   remotelab chat                     Run chat server in foreground
   remotelab generate-token           Generate a new access token
+  remotelab set-password             Set username & password for login
   remotelab --help                   Show this help message
   remotelab --version                Show version`);
 }
@@ -75,6 +76,11 @@ switch (command) {
     } catch (err) {
       process.exit(err.status ?? 1);
     }
+    break;
+  }
+
+  case 'set-password': {
+    await import(scriptPath('set-password.mjs'));
     break;
   }
 

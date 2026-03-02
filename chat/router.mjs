@@ -5,7 +5,7 @@ import { parse as parseUrl, fileURLToPath } from 'url';
 import { SESSION_EXPIRY, CHAT_IMAGES_DIR } from '../lib/config.mjs';
 import {
   sessions, saveAuthSessions,
-  verifyToken, generateToken,
+  verifyToken, verifyPassword, generateToken,
   parseCookies, setCookie, clearCookie,
 } from '../lib/auth.mjs';
 import { getAvailableTools } from '../lib/tools.mjs';
@@ -20,6 +20,7 @@ import {
 // Paths (files are read from disk on each request for hot-reload)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const chatTemplatePath = join(__dirname, '..', 'templates', 'chat.html');
+const loginTemplatePath = join(__dirname, '..', 'templates', 'login.html');
 const staticDir = join(__dirname, '..', 'static');
 
 const staticMimeTypes = {
@@ -75,15 +76,50 @@ export async function handleRequest(req, res) {
     return;
   }
 
-  // Login page (minimal)
+  // Login — POST (form submit)
+  if (pathname === '/login' && req.method === 'POST') {
+    const ip = getClientIp(req);
+    if (isRateLimited(ip)) {
+      res.writeHead(429, { 'Content-Type': 'text/plain', 'Retry-After': '60' });
+      res.end('Too many failed attempts. Please try again later.');
+      return;
+    }
+    let body;
+    try { body = await readBody(req, 4096); } catch { body = ''; }
+    const params = new URLSearchParams(body);
+    const type = params.get('type');
+    let valid = false;
+    if (type === 'token') {
+      valid = verifyToken(params.get('token') || '');
+    } else if (type === 'password') {
+      valid = verifyPassword(params.get('username') || '', params.get('password') || '');
+    }
+    if (valid) {
+      clearFailedAttempts(ip);
+      const sessionToken = generateToken();
+      sessions.set(sessionToken, { expiry: Date.now() + SESSION_EXPIRY });
+      saveAuthSessions();
+      res.writeHead(302, { 'Location': '/', 'Set-Cookie': setCookie(sessionToken) });
+    } else {
+      recordFailedAttempt(ip);
+      const mode = type === 'password' ? 'pw' : 'token';
+      res.writeHead(302, { 'Location': `/login?error=1&mode=${mode}` });
+    }
+    res.end();
+    return;
+  }
+
+  // Login — GET (show form)
   if (pathname === '/login') {
+    const hasError = parsedUrl.query.error === '1';
+    const mode = parsedUrl.query.mode === 'pw' ? 'pw' : 'token';
+    let loginHtml;
+    try { loginHtml = readFileSync(loginTemplatePath, 'utf8'); } catch { loginHtml = '<h1>Login template missing</h1>'; }
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RemoteLab Chat - Login</title>
-<style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e5e5e5}
-.box{text-align:center;padding:2rem}h1{font-size:1.5rem;margin-bottom:1rem}
-p{color:#888}a{color:#60a5fa}</style></head>
-<body><div class="box"><h1>RemoteLab Chat</h1><p>Append <code>?token=YOUR_TOKEN</code> to the URL to log in.</p></div></body></html>`);
+    res.end(loginHtml
+      .replace(/\{\{NONCE\}\}/g, nonce)
+      .replace(/\{\{ERROR_CLASS\}\}/g, hasError ? '' : 'hidden')
+      .replace(/\{\{MODE\}\}/g, mode));
     return;
   }
 
