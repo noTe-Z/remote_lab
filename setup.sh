@@ -274,6 +274,7 @@ if [[ "$USE_CLOUDFLARE" == true ]]; then
     mkdir -p "$HOME/.cloudflared"
 
     # Create cloudflared config
+    # Primary subdomain routes to chat-server (7690). Auth-proxy (7681) is localhost-only emergency access.
     print_info "Creating cloudflared config..."
     cat > "$HOME/.cloudflared/config.yml" << EOF
 tunnel: $TUNNEL_NAME
@@ -282,7 +283,7 @@ protocol: http2
 
 ingress:
   - hostname: $FULL_DOMAIN
-    service: http://127.0.0.1:7681
+    service: http://127.0.0.1:7690
   - service: http_status:404
 EOF
     print_success "Created: ~/.cloudflared/config.yml"
@@ -411,6 +412,72 @@ EOF
 fi
 print_success "Created: ~/Library/LaunchAgents/com.authproxy.claude.plist"
 
+# Create chat-server launchd plist (primary service)
+print_info "Creating chat-server service..."
+if [[ "$USE_CLOUDFLARE" == true ]]; then
+    cat > "$HOME/Library/LaunchAgents/com.chatserver.claude.plist" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.chatserver.claude</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>$(which node)</string>
+        <string>$SCRIPT_DIR/chat-server.mjs</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>$USER_HOME</string>
+    <key>StandardOutPath</key>
+    <string>$USER_HOME/Library/Logs/chat-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>$USER_HOME/Library/Logs/chat-server.error.log</string>
+</dict>
+</plist>
+EOF
+else
+    cat > "$HOME/Library/LaunchAgents/com.chatserver.claude.plist" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.chatserver.claude</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$(which node)</string>
+        <string>$SCRIPT_DIR/chat-server.mjs</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SECURE_COOKIES</key>
+        <string>0</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>$USER_HOME</string>
+    <key>StandardOutPath</key>
+    <string>$USER_HOME/Library/Logs/chat-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>$USER_HOME/Library/Logs/chat-server.error.log</string>
+</dict>
+</plist>
+EOF
+fi
+print_success "Created: ~/Library/LaunchAgents/com.chatserver.claude.plist"
+
 if [[ "$USE_CLOUDFLARE" == true ]]; then
     # Create cloudflared launchd plist
     print_info "Creating cloudflared service..."
@@ -448,11 +515,14 @@ fi
 print_info "Creating start.sh..."
 cat > "$SCRIPT_DIR/start.sh" << 'EOF'
 #!/bin/bash
-echo "Starting Claude Code web services..."
+echo "Starting RemoteLab services..."
 # Unload legacy shared ttyd plist if present (ttyd is now managed per-session by auth-proxy)
 if launchctl list | grep -q 'com.ttyd.claude'; then
   launchctl unload ~/Library/LaunchAgents/com.ttyd.claude.plist 2>/dev/null || true
   echo "Unloaded legacy shared ttyd service"
+fi
+if [ -f ~/Library/LaunchAgents/com.chatserver.claude.plist ]; then
+  launchctl load ~/Library/LaunchAgents/com.chatserver.claude.plist 2>/dev/null || echo "chat-server already loaded"
 fi
 launchctl load ~/Library/LaunchAgents/com.authproxy.claude.plist 2>/dev/null || echo "auth-proxy already loaded"
 if [ -f ~/Library/LaunchAgents/com.cloudflared.tunnel.plist ]; then
@@ -461,9 +531,10 @@ fi
 echo "Services started!"
 echo ""
 echo "Check status with:"
-echo "  launchctl list | grep -E 'authproxy|cloudflared'"
+echo "  launchctl list | grep -E 'chatserver|authproxy|cloudflared'"
 echo ""
 echo "View logs:"
+echo "  tail -f ~/Library/Logs/chat-server.log"
 echo "  tail -f ~/Library/Logs/auth-proxy.log"
 if [ -f ~/Library/LaunchAgents/com.cloudflared.tunnel.plist ]; then
   echo "  tail -f ~/Library/Logs/cloudflared.log"
@@ -519,9 +590,10 @@ else
 # Generated: $(date)
 # Mode: Localhost only (no Cloudflare)
 
-Access URL: http://127.0.0.1:7681/?token=$ACCESS_TOKEN
+Access URL: http://127.0.0.1:7690/?token=$ACCESS_TOKEN
 
 # Configuration Files:
+- chat-server service: ~/Library/LaunchAgents/com.chatserver.claude.plist
 - auth-proxy service: ~/Library/LaunchAgents/com.authproxy.claude.plist
 
 # Management:
@@ -539,16 +611,20 @@ print_header "Step 6: Starting Services"
 
 # Stop any already-running instances to avoid EADDRINUSE on re-runs
 print_info "Stopping any existing services..."
+launchctl unload "$HOME/Library/LaunchAgents/com.chatserver.claude.plist" 2>/dev/null || true
 launchctl unload "$HOME/Library/LaunchAgents/com.authproxy.claude.plist" 2>/dev/null || true
 if [[ "$USE_CLOUDFLARE" == true ]]; then
     launchctl unload "$HOME/Library/LaunchAgents/com.cloudflared.tunnel.plist" 2>/dev/null || true
 fi
 # Kill any lingering processes holding the ports
+pkill -f chat-server.mjs 2>/dev/null || true
 pkill -f auth-proxy.mjs 2>/dev/null || true
+lsof -ti :7690 2>/dev/null | xargs kill -9 2>/dev/null || true
 lsof -ti :7681 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 2
 
 print_info "Loading services..."
+launchctl load "$HOME/Library/LaunchAgents/com.chatserver.claude.plist"
 launchctl load "$HOME/Library/LaunchAgents/com.authproxy.claude.plist"
 if [[ "$USE_CLOUDFLARE" == true ]]; then
     launchctl load "$HOME/Library/LaunchAgents/com.cloudflared.tunnel.plist"
@@ -559,12 +635,18 @@ sleep 3
 # Verify services — check for a real PID (column 1), not just presence in the list
 service_pid() { launchctl list | awk -v svc="$1" '$3 == svc && $1 ~ /^[0-9]+$/ {print $1}'; }
 
-AUTHPROXY_PID=$(service_pid "com.authproxy.claude")
-
-if [[ -n "$AUTHPROXY_PID" ]]; then
-    print_success "auth-proxy service running (PID $AUTHPROXY_PID)"
+CHATSERVER_PID=$(service_pid "com.chatserver.claude")
+if [[ -n "$CHATSERVER_PID" ]]; then
+    print_success "chat-server running (PID $CHATSERVER_PID)"
 else
-    print_error "auth-proxy service failed to start — check ~/Library/Logs/auth-proxy.error.log"
+    print_error "chat-server failed to start — check ~/Library/Logs/chat-server.error.log"
+fi
+
+AUTHPROXY_PID=$(service_pid "com.authproxy.claude")
+if [[ -n "$AUTHPROXY_PID" ]]; then
+    print_success "auth-proxy running (PID $AUTHPROXY_PID)"
+else
+    print_error "auth-proxy failed to start — check ~/Library/Logs/auth-proxy.error.log"
 fi
 
 if [[ "$USE_CLOUDFLARE" == true ]]; then
@@ -608,27 +690,26 @@ if [[ "$USE_CLOUDFLARE" == true ]]; then
     echo "  3. Start using Claude Code from anywhere!"
     echo ""
     echo "Logs:"
-    echo "  auth-proxy: ~/Library/Logs/auth-proxy.log"
+    echo "  chat-server: ~/Library/Logs/chat-server.log"
     echo "  cloudflared: ~/Library/Logs/cloudflared.log"
 else
-    echo -e "${GREEN}✓ Claude Code is now accessible locally!${NC}"
+    echo -e "${GREEN}✓ RemoteLab is now accessible locally!${NC}"
     echo ""
-    echo "Access URL: ${BLUE}http://127.0.0.1:7681/?token=$ACCESS_TOKEN${NC}"
+    echo "Access URL: ${BLUE}http://127.0.0.1:7690/?token=$ACCESS_TOKEN${NC}"
     echo ""
     print_warning "SAVE THIS URL! It's also in: $SCRIPT_DIR/credentials.txt"
     echo ""
     echo "Next steps:"
     echo "  1. Open the access URL in your browser"
-    echo "  2. Start using Claude Code!"
+    echo "  2. Start chatting with your AI tools!"
     echo ""
     echo "Logs:"
-    echo "  auth-proxy: ~/Library/Logs/auth-proxy.log"
+    echo "  chat-server: ~/Library/Logs/chat-server.log"
+    echo "  auth-proxy (fallback): ~/Library/Logs/auth-proxy.log"
 fi
 echo ""
 echo "Management commands:"
 echo "  Start: $SCRIPT_DIR/start.sh"
 echo "  Stop:  $SCRIPT_DIR/stop.sh"
-echo ""
-echo "  auth-proxy: ~/Library/Logs/auth-proxy.log"
 echo ""
 print_success "Setup completed successfully!"

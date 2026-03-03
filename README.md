@@ -1,284 +1,110 @@
 # RemoteLab
 
-Access AI coding CLI tools (Claude Code, Cline, Codex, etc.) from any browser — phone, tablet, or computer — via HTTPS.
+Control AI coding tools (Claude Code, Codex, Cline) from your phone mac or any other device! — no SSH, no VPN, just a browser.
 
-## What It Does
+![Chat UI](docs/demo.gif)
 
-You have a Mac with AI coding tools installed. RemoteLab lets you use them from your phone while you're away from the computer, through a chat interface in the browser.
+---
 
-```
-Phone/Browser ──HTTPS──→ Cloudflare Tunnel ──→ RemoteLab (Node.js on your Mac)
-                                                     │
-                                               Chat UI (primary)
-                                                     │
-                                               Spawns CLI tools
-                                               (claude, cline, codex)
-```
+## For Humans
 
-## Setup Guide (AI-Executable)
+### What it does
 
-> This guide is written so that an AI assistant (e.g. Claude Code) can execute most steps automatically. Steps marked with **[HUMAN]** require manual action.
+RemoteLab runs a lightweight web server on your Mac. You point a Cloudflare tunnel at it, get an HTTPS URL, and from any browser (phone, tablet, whatever) you can open a chat interface that talks to Claude Code running on your machine.
 
-### Prerequisites
+Your sessions persist across disconnects. History is kept on disk. Multiple folders, multiple sessions, running in parallel.
 
-- **macOS** with **Homebrew** installed
-- **Node.js 18+**
-- At least one AI CLI tool installed (e.g. `claude`)
+### Get set up in 5 minutes — hand it to an AI
 
-### Phase 1: Clone & Install (AI can do this)
+The fastest way to set this up is to paste the following prompt into Claude Code on your Mac. The AI handles everything automatically. The only thing it'll stop and ask you for is a browser login to Cloudflare (unavoidable — they need to confirm you own the domain).
 
-```bash
-git clone https://github.com/Ninglo/remotelab.git ~/code/remotelab
-cd ~/code/remotelab
-npm install
-npm link
+**Prerequisites before you paste the prompt:**
+- macOS with Homebrew installed
+- Node.js 18+
+- At least one AI tool installed (`claude`, `codex`)
+- A domain pointed at Cloudflare ([free account](https://cloudflare.com), domain ~$1–12/yr from Namecheap or Porkbun)
 
-# Install system dependencies
-brew install dtach ttyd cloudflared
-```
+---
 
-### Phase 2: Cloudflare Authentication [HUMAN]
-
-> **This step opens a browser and requires the human to log in to Cloudflare and select a domain.**
-
-Prerequisite: The human needs a domain added to Cloudflare (free plan works). If they don't have one, they need to:
-1. Buy a domain ($1-12/year from Namecheap, Porkbun, etc.)
-2. Create a free Cloudflare account at https://dash.cloudflare.com
-3. Add the domain to Cloudflare and update nameservers at the registrar
-
-Once the domain is ready, run:
-
-```bash
-cloudflared tunnel login
-```
-
-This opens a browser. The human selects their domain, then tells you to continue.
-
-### Phase 3: Create Tunnel & Configure (AI can do this)
-
-After the human confirms Phase 2 is done:
-
-```bash
-# Create tunnel (use any name you like)
-cloudflared tunnel create remotelab
-
-# Note the Tunnel ID (UUID) from the output, then route DNS.
-# Replace SUBDOMAIN.DOMAIN with the actual values:
-cloudflared tunnel route dns remotelab SUBDOMAIN.DOMAIN
-```
-
-Create the cloudflared config (replace placeholders with real values):
-
-```bash
-cat > ~/.cloudflared/config.yml << EOF
-tunnel: remotelab
-credentials-file: /Users/$(whoami)/.cloudflared/<TUNNEL_ID>.json
-protocol: http2
-
-ingress:
-  - hostname: SUBDOMAIN.DOMAIN
-    service: http://127.0.0.1:7681
-  - hostname: SUBDOMAIN2.DOMAIN
-    service: http://127.0.0.1:7690
-  - service: http_status:404
-EOF
-```
-
-> Port 7681 = auth-proxy (terminal fallback). Port 7690 = chat server (primary interface). Use two subdomains if you want both accessible, or just map the chat server.
-
-### Phase 4: Generate Credentials (AI can do this)
-
-```bash
-# Generate access token
-remotelab generate-token
-
-# (Optional) Set username & password for login
-remotelab set-password
-```
-
-Save the token — it will be needed to log in.
-
-### Phase 5: Create LaunchAgent Services (AI can do this)
-
-Create three plist files. All paths must be absolute (use `which node`, `which cloudflared`, `whoami` to get real values).
-
-**Chat server** (`~/Library/LaunchAgents/com.chatserver.claude.plist`):
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.chatserver.claude</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/caffeinate</string>
-        <string>-s</string>
-        <string>NODE_ABSOLUTE_PATH</string>
-        <string>REMOTELAB_DIR/chat-server.mjs</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>USER_HOME</string>
-    <key>StandardOutPath</key>
-    <string>USER_HOME/Library/Logs/chat-server.log</string>
-    <key>StandardErrorPath</key>
-    <string>USER_HOME/Library/Logs/chat-server.error.log</string>
-</dict>
-</plist>
-```
-
-**Auth proxy** (`~/Library/LaunchAgents/com.authproxy.claude.plist`):
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.authproxy.claude</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/caffeinate</string>
-        <string>-s</string>
-        <string>NODE_ABSOLUTE_PATH</string>
-        <string>REMOTELAB_DIR/auth-proxy.mjs</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>USER_HOME</string>
-    <key>StandardOutPath</key>
-    <string>USER_HOME/Library/Logs/auth-proxy.log</string>
-    <key>StandardErrorPath</key>
-    <string>USER_HOME/Library/Logs/auth-proxy.error.log</string>
-</dict>
-</plist>
-```
-
-**Cloudflared** (`~/Library/LaunchAgents/com.cloudflared.tunnel.plist`):
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.cloudflared.tunnel</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>CLOUDFLARED_ABSOLUTE_PATH</string>
-        <string>tunnel</string>
-        <string>run</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>USER_HOME</string>
-    <key>StandardOutPath</key>
-    <string>USER_HOME/Library/Logs/cloudflared.log</string>
-    <key>StandardErrorPath</key>
-    <string>USER_HOME/Library/Logs/cloudflared.error.log</string>
-</dict>
-</plist>
-```
-
-Replace all placeholders (`NODE_ABSOLUTE_PATH`, `REMOTELAB_DIR`, `USER_HOME`, `CLOUDFLARED_ABSOLUTE_PATH`) with actual absolute paths.
-
-### Phase 6: Start & Verify (AI can do this)
-
-```bash
-remotelab start
-
-# Or manually:
-launchctl load ~/Library/LaunchAgents/com.chatserver.claude.plist
-launchctl load ~/Library/LaunchAgents/com.authproxy.claude.plist
-launchctl load ~/Library/LaunchAgents/com.cloudflared.tunnel.plist
-```
-
-Verify:
-
-```bash
-# All three should show PIDs
-launchctl list | grep -E 'chatserver|authproxy|cloudflared'
-
-# Chat server should say "listening on 127.0.0.1:7690"
-tail -5 ~/Library/Logs/chat-server.log
-
-# Auth proxy should say "listening on 127.0.0.1:7681"
-tail -5 ~/Library/Logs/auth-proxy.log
-
-# Should show "Registered tunnel connection"
-tail -5 ~/Library/Logs/cloudflared.error.log
-```
-
-### Phase 7: Access [HUMAN]
-
-Open in a browser:
+**Copy this prompt into Claude Code:**
 
 ```
-https://SUBDOMAIN.DOMAIN/?token=YOUR_TOKEN
+I want to set up RemoteLab on this Mac so I can control AI coding tools from my phone.
+
+My domain: [YOUR_DOMAIN]          (e.g. example.com)
+Subdomain I want to use: [SUBDOMAIN]  (e.g. chat — will create chat.example.com)
+
+Please follow the full setup guide at docs/setup.md in this repository.
+Do every step you can automatically. When you hit a [HUMAN] step, stop and tell me exactly what to do.
+After I confirm each manual step, continue to the next phase.
 ```
 
-The token is exchanged for a session cookie on first visit. After that, just visit the URL without the token.
+Fill in your domain and subdomain, paste it, and follow the AI's instructions. You'll click through one Cloudflare browser login. Everything else is automated.
 
-### Alternative: Interactive Setup
+---
 
-Instead of the manual phases above, you can run the interactive setup wizard which handles phases 1-6:
+### What you'll have when done
 
-```bash
-remotelab setup
+Open `https://[subdomain].[domain]/?token=YOUR_TOKEN` on your phone:
+
+![Dashboard](docs/new-dashboard.png)
+
+- Create a session: pick a folder + AI tool
+- Send messages — responses stream back in real time
+- Close the browser, come back later — session is still alive
+- Paste screenshots directly into the chat
+
+### Daily usage
+
+Once set up, the service auto-starts on Mac boot. Just open the URL on your phone.
+
+```
+remotelab start          # start all services
+remotelab stop           # stop all services
+remotelab restart chat   # restart just the chat server
 ```
 
-It will prompt for domain, handle Cloudflare auth, create all config files, and start services.
-
-## CLI Commands
-
-```
-remotelab setup                Run interactive setup wizard
-remotelab start                Start all services (chat + proxy + tunnel)
-remotelab stop                 Stop all services
-remotelab restart [service]    Restart: chat | proxy | tunnel | all
-remotelab chat                 Run chat server in foreground
-remotelab server               Run auth proxy in foreground
-remotelab generate-token       Generate a new access token
-remotelab set-password         Set username & password for login
-remotelab --help               Show help
-```
+---
 
 ## Architecture
 
-Two services run on the Mac, both behind Cloudflare Tunnel:
+Two services run on your Mac behind a Cloudflare tunnel:
 
 | Service | Port | Role |
 |---------|------|------|
 | `chat-server.mjs` | 7690 | **Primary.** Chat UI, spawns CLI tools, WebSocket streaming |
-| `auth-proxy.mjs` | 7681 | **Fallback.** Terminal-over-browser via ttyd, for emergencies |
+| `auth-proxy.mjs` | 7681 | **Fallback.** Raw terminal via ttyd — for emergencies only |
 
-The chat server provides a mobile-friendly conversation interface. The auth-proxy provides raw terminal access as a backup if the chat server breaks.
+The Cloudflare tunnel routes your domain to the chat server (7690). The auth-proxy is localhost-only — if chat breaks badly enough, you SSH in and hit it directly.
 
-### How Chat Works
+```
+Phone ──HTTPS──→ Cloudflare Tunnel ──→ chat-server :7690
+                                              │
+                                        spawns subprocess
+                                        (claude / codex / cline)
+                                              │
+                                        streams events → WebSocket → browser
+```
 
-1. User opens chat UI in browser
-2. Creates a session (picks a folder + tool)
-3. Sends a message → WebSocket → server spawns CLI tool with the message
-4. Tool output streams back as events (messages, tool use, reasoning, etc.)
-5. Session persists across disconnects — history stored on disk
+### Session persistence
 
-### Supported Tools
+Each chat session is a subprocess. When you disconnect, the process keeps running. When you reconnect, the server replays history and reattaches to the live stream.
 
-- **Claude Code** (`claude`) — primary, with `--dangerously-skip-permissions` and session resume
-- **Cline** (`cline`)
-- **Codex** (`codex`)
-- Any custom CLI tool added from the dashboard
+---
+
+## CLI Reference
+
+```
+remotelab setup                Run interactive setup wizard
+remotelab start                Start all services
+remotelab stop                 Stop all services
+remotelab restart [service]    Restart: chat | proxy | tunnel | all
+remotelab chat                 Run chat server in foreground (debug)
+remotelab server               Run auth proxy in foreground (debug)
+remotelab generate-token       Generate a new access token
+remotelab set-password         Set username & password (alternative to token)
+remotelab --help               Show help
+```
 
 ## Configuration
 
@@ -286,58 +112,54 @@ The chat server provides a mobile-friendly conversation interface. The auth-prox
 |----------|---------|-------------|
 | `CHAT_PORT` | `7690` | Chat server port |
 | `LISTEN_PORT` | `7681` | Auth proxy port |
-| `TTYD_PORT_RANGE_START` | `7700` | ttyd per-session port range start |
-| `TTYD_PORT_RANGE_END` | `7799` | ttyd per-session port range end |
-| `SESSION_EXPIRY` | `86400000` | Cookie lifetime in ms (default 24h) |
+| `SESSION_EXPIRY` | `86400000` | Cookie lifetime in ms (24h) |
 | `SECURE_COOKIES` | `1` | Set `0` for localhost without HTTPS |
 
-## File Locations
+## File locations
 
-| Path | Description |
-|------|-------------|
+| Path | Contents |
+|------|----------|
 | `~/.config/claude-web/auth.json` | Access token + password hash |
 | `~/.config/claude-web/chat-sessions.json` | Chat session metadata |
 | `~/.config/claude-web/chat-history/` | Per-session event logs (JSONL) |
-| `~/.config/claude-web/sessions.json` | Terminal session metadata |
-| `~/.config/claude-web/sockets/` | dtach socket files |
 | `~/Library/Logs/chat-server.log` | Chat server stdout |
 | `~/Library/Logs/auth-proxy.log` | Auth proxy stdout |
-| `~/Library/Logs/cloudflared.log` | Tunnel logs |
+| `~/Library/Logs/cloudflared.log` | Tunnel stdout |
 
 ## Security
 
-- HTTPS via Cloudflare Tunnel (TLS at edge)
-- 256-bit random access token with timing-safe comparison
-- Scrypt-hashed passwords (optional, alternative to token)
-- HttpOnly, Secure, SameSite=Strict session cookies (24h expiry)
+- HTTPS via Cloudflare (TLS at edge, Mac-side is localhost HTTP)
+- 256-bit random access token, timing-safe comparison
+- Optional scrypt-hashed password login
+- HttpOnly + Secure + SameSite=Strict session cookies, 24h expiry
 - Per-IP rate limiting with exponential backoff on failed login
-- Localhost-only binding (127.0.0.1) — no direct external access
+- Mac server binds to 127.0.0.1 only — no direct external exposure
 - CSP headers with nonce-based script allowlist
-- Input validation: folder paths must exist, tool commands reject shell metacharacters
 
 ## Troubleshooting
 
-### Service won't start
+**Service won't start:**
 ```bash
 tail -50 ~/Library/Logs/chat-server.error.log
 tail -50 ~/Library/Logs/auth-proxy.error.log
 ```
 
-### DNS not resolving
-Wait 5-30 minutes after setup. Check: `dig SUBDOMAIN.DOMAIN +short`
+**DNS not resolving:** Wait 5–30 minutes after setup. Verify: `dig SUBDOMAIN.DOMAIN +short`
 
-### Port already in use
+**Port already in use:**
 ```bash
 lsof -i :7690   # chat server
 lsof -i :7681   # auth proxy
 ```
 
-### Restart a single service
+**Restart a single service:**
 ```bash
-remotelab restart chat    # just the chat server
-remotelab restart proxy   # just the auth proxy
-remotelab restart tunnel  # just cloudflared
+remotelab restart chat
+remotelab restart proxy
+remotelab restart tunnel
 ```
+
+---
 
 ## License
 
