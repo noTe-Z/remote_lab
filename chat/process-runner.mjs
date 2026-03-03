@@ -21,11 +21,19 @@ const TAG = '[process-runner]';
  */
 function resolveCommand(cmd) {
   const home = process.env.HOME || '';
+  const isMac = process.platform === 'darwin';
   const preferred = [
     `${home}/.local/bin/${cmd}`,
-    `${home}/Library/pnpm/${cmd}`,
-    `/opt/homebrew/bin/${cmd}`,
+    // macOS-specific paths
+    ...(isMac ? [
+      `${home}/Library/pnpm/${cmd}`,
+      `/opt/homebrew/bin/${cmd}`,
+    ] : [
+      // Linux-specific paths
+      `/snap/bin/${cmd}`,
+    ]),
     `/usr/local/bin/${cmd}`,
+    `/usr/bin/${cmd}`,
   ];
   for (const p of preferred) {
     if (p && existsSync(p)) {

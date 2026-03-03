@@ -11,11 +11,19 @@ import { createClaudeAdapter } from './adapters/claude.mjs';
 
 function resolveClaudeCmd() {
   const home = process.env.HOME || homedir();
+  const isMac = process.platform === 'darwin';
   const preferred = [
     join(home, '.local', 'bin', 'claude'),
-    join(home, 'Library', 'pnpm', 'claude'),
-    '/opt/homebrew/bin/claude',
+    // macOS-specific paths
+    ...(isMac ? [
+      join(home, 'Library', 'pnpm', 'claude'),
+      '/opt/homebrew/bin/claude',
+    ] : [
+      // Linux-specific paths
+      '/snap/bin/claude',
+    ]),
     '/usr/local/bin/claude',
+    '/usr/bin/claude',
   ];
   for (const p of preferred) {
     if (existsSync(p)) return p;

@@ -6,8 +6,16 @@
 #   logs.sh tunnel   — 只看 cloudflared 日志 (实时 tail)
 #   logs.sh status   — 只看服务状态
 
-LOG_DIR="$HOME/Library/Logs"
 CMD="${1:-all}"
+
+# Detect OS and set log directory
+if [[ "$(uname)" == "Darwin" ]]; then
+    OS_TYPE="macos"
+    LOG_DIR="$HOME/Library/Logs"
+else
+    OS_TYPE="linux"
+    LOG_DIR="$HOME/.local/share/remotelab/logs"
+fi
 
 # ── 颜色 ──────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -15,22 +23,38 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
 # ── 服务状态 ──────────────────────────────────────────────────────────────────
 show_status() {
-  echo -e "${BOLD}=== 服务状态 ===${RESET}"
+  echo -e "${BOLD}=== 服务状态 (${OS_TYPE}) ===${RESET}"
 
-  for label in com.chatserver.claude com.cloudflared.tunnel com.authproxy.claude; do
-    info=$(launchctl list 2>/dev/null | grep "$label")
-    if [ -n "$info" ]; then
-      pid=$(echo "$info" | awk '{print $1}')
-      exit_code=$(echo "$info" | awk '{print $2}')
-      if [ "$pid" != "-" ] && [ -n "$pid" ]; then
-        echo -e "  ${GREEN}●${RESET} $label  (pid=$pid)"
+  if [[ "$OS_TYPE" == "macos" ]]; then
+    for label in com.chatserver.claude com.cloudflared.tunnel com.authproxy.claude; do
+      info=$(launchctl list 2>/dev/null | grep "$label")
+      if [ -n "$info" ]; then
+        pid=$(echo "$info" | awk '{print $1}')
+        exit_code=$(echo "$info" | awk '{print $2}')
+        if [ "$pid" != "-" ] && [ -n "$pid" ]; then
+          echo -e "  ${GREEN}●${RESET} $label  (pid=$pid)"
+        else
+          echo -e "  ${RED}✗${RESET} $label  (not running, last exit=$exit_code)"
+        fi
       else
-        echo -e "  ${RED}✗${RESET} $label  (not running, last exit=$exit_code)"
+        echo -e "  ${YELLOW}?${RESET} $label  (not loaded)"
       fi
-    else
-      echo -e "  ${YELLOW}?${RESET} $label  (not loaded)"
-    fi
-  done
+    done
+  else
+    for unit in remotelab-chat remotelab-proxy remotelab-tunnel; do
+      if systemctl --user list-unit-files "${unit}.service" &>/dev/null 2>&1; then
+        if systemctl --user is-active --quiet "${unit}.service" 2>/dev/null; then
+          pid=$(systemctl --user show -p MainPID --value "${unit}.service" 2>/dev/null || echo "?")
+          echo -e "  ${GREEN}●${RESET} ${unit}.service  (pid=${pid})"
+        else
+          status=$(systemctl --user is-active "${unit}.service" 2>/dev/null || echo "unknown")
+          echo -e "  ${RED}✗${RESET} ${unit}.service  (${status})"
+        fi
+      else
+        echo -e "  ${YELLOW}?${RESET} ${unit}.service  (not installed)"
+      fi
+    done
+  fi
   echo ""
 }
 
@@ -66,15 +90,24 @@ case "$CMD" in
 
   chat)
     echo -e "${BOLD}实时跟踪 chat-server 日志 (Ctrl+C 退出)${RESET}"
-    echo -e "${CYAN}stdout:${RESET} $LOG_DIR/chat-server.log"
-    echo -e "${RED}stderr:${RESET} $LOG_DIR/chat-server.error.log"
-    echo ""
-    tail -f "$LOG_DIR/chat-server.log" "$LOG_DIR/chat-server.error.log" 2>/dev/null
+    if [[ "$OS_TYPE" == "linux" ]]; then
+      echo -e "${CYAN}journalctl:${RESET} journalctl --user -u remotelab-chat -f"
+      echo ""
+      journalctl --user -u remotelab-chat -f 2>/dev/null || \
+        tail -f "$LOG_DIR/chat-server.log" "$LOG_DIR/chat-server.error.log" 2>/dev/null
+    else
+      tail -f "$LOG_DIR/chat-server.log" "$LOG_DIR/chat-server.error.log" 2>/dev/null
+    fi
     ;;
 
   tunnel)
     echo -e "${BOLD}实时跟踪 cloudflared 日志 (Ctrl+C 退出)${RESET}"
-    tail -f "$LOG_DIR/cloudflared.log" "$LOG_DIR/cloudflared.error.log" 2>/dev/null
+    if [[ "$OS_TYPE" == "linux" ]]; then
+      journalctl --user -u remotelab-tunnel -f 2>/dev/null || \
+        tail -f "$LOG_DIR/cloudflared.log" "$LOG_DIR/cloudflared.error.log" 2>/dev/null
+    else
+      tail -f "$LOG_DIR/cloudflared.log" "$LOG_DIR/cloudflared.error.log" 2>/dev/null
+    fi
     ;;
 
   all|*)
@@ -95,5 +128,11 @@ case "$CMD" in
     echo "  logs.sh chat    # 实时跟踪 chat-server"
     echo "  logs.sh tunnel  # 实时跟踪 cloudflared"
     echo "  logs.sh status  # 只看服务状态"
+    if [[ "$OS_TYPE" == "linux" ]]; then
+      echo ""
+      echo "  # systemd 日志 (更完整):"
+      echo "  journalctl --user -u remotelab-chat -f"
+      echo "  journalctl --user -u remotelab-proxy -f"
+    fi
     ;;
 esac

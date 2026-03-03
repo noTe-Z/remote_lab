@@ -33,7 +33,8 @@
     "node": ">=18.0.0"
   },
   "os": [
-    "darwin"
+    "darwin",
+    "linux"
   ],
   "bin": {
     "remotelab": "cli.js"

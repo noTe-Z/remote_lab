@@ -10,7 +10,15 @@ set -e
 
 SERVICE="${1:-all}"
 
-restart_service() {
+# Detect OS
+if [[ "$(uname)" == "Darwin" ]]; then
+    OS_TYPE="macos"
+else
+    OS_TYPE="linux"
+fi
+
+# ── macOS: launchctl ──────────────────────────────────────────────────────────
+restart_launchd() {
   local label="$1"
   local plist="$HOME/Library/LaunchAgents/${label}.plist"
   local name="$2"
@@ -22,7 +30,6 @@ restart_service() {
 
   if launchctl list | grep -q "$label"; then
     launchctl stop "$label" 2>/dev/null || true
-    # KeepAlive will auto-restart; wait for new process
     sleep 1
     echo "  $name: restarted ($(launchctl list | grep "$label" | awk '{print "pid="$1}'))"
   else
@@ -31,24 +38,52 @@ restart_service() {
   fi
 }
 
+# ── Linux: systemd --user ─────────────────────────────────────────────────────
+restart_systemd() {
+  local unit="$1"
+  local name="$2"
+
+  if ! systemctl --user list-unit-files "${unit}.service" &>/dev/null; then
+    echo "  $name: service unit not found, skipping"
+    return
+  fi
+
+  systemctl --user restart "${unit}.service" 2>/dev/null && \
+    echo "  $name: restarted" || \
+    echo "  $name: failed to restart (check: journalctl --user -u ${unit})"
+}
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+restart_service() {
+  local name="$1"
+  local launchd_label="$2"
+  local systemd_unit="$3"
+
+  if [[ "$OS_TYPE" == "macos" ]]; then
+    restart_launchd "$launchd_label" "$name"
+  else
+    restart_systemd "$systemd_unit" "$name"
+  fi
+}
+
 case "$SERVICE" in
   chat)
     echo "Restarting chat-server..."
-    restart_service "com.chatserver.claude" "chat-server"
+    restart_service "chat-server" "com.chatserver.claude" "remotelab-chat"
     ;;
   proxy)
     echo "Restarting auth-proxy..."
-    restart_service "com.authproxy.claude" "auth-proxy"
+    restart_service "auth-proxy" "com.authproxy.claude" "remotelab-proxy"
     ;;
   tunnel)
     echo "Restarting cloudflared..."
-    restart_service "com.cloudflared.tunnel" "cloudflared"
+    restart_service "cloudflared" "com.cloudflared.tunnel" "remotelab-tunnel"
     ;;
   all)
     echo "Restarting all services..."
-    restart_service "com.authproxy.claude" "auth-proxy"
-    restart_service "com.chatserver.claude" "chat-server"
-    restart_service "com.cloudflared.tunnel" "cloudflared"
+    restart_service "auth-proxy"  "com.authproxy.claude"   "remotelab-proxy"
+    restart_service "chat-server" "com.chatserver.claude"  "remotelab-chat"
+    restart_service "cloudflared" "com.cloudflared.tunnel" "remotelab-tunnel"
     ;;
   *)
     echo "Unknown service: $SERVICE"
