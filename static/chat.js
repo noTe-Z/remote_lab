@@ -30,6 +30,8 @@
   const inlineToolSelect = document.getElementById("inlineToolSelect");
   const thinkingToggle = document.getElementById("thinkingToggle");
   const cancelBtn = document.getElementById("cancelBtn");
+  const contextTokens = document.getElementById("contextTokens");
+  const compactBtn = document.getElementById("compactBtn");
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
   const progressPanel = document.getElementById("progressPanel");
@@ -46,6 +48,8 @@
   let finishedUnread = new Set(); // sessionIds finished but not yet opened
   let lastSidebarUpdatedAt = {}; // sessionId -> last known updatedAt
   let messageQueue = []; // messages queued while disconnected
+
+  let currentTokens = 0;
 
   let selectedTool = localStorage.getItem("selectedTool") || null;
   // Default thinking to enabled; only disable if explicitly set to 'false'
@@ -588,6 +592,20 @@
     messagesInner.appendChild(div);
   }
 
+  function formatTokens(n) {
+    if (n < 500) return "< 1K";
+    return "~" + Math.round(n / 1000) + "K";
+  }
+
+  function updateContextDisplay(inputTokens) {
+    currentTokens = inputTokens;
+    if (inputTokens > 0 && currentSessionId) {
+      contextTokens.textContent = formatTokens(inputTokens);
+      contextTokens.style.display = "";
+      compactBtn.style.display = "";
+    }
+  }
+
   function renderUsage(evt) {
     const div = document.createElement("div");
     div.className = "usage-info";
@@ -595,6 +613,7 @@
     const output = evt.outputTokens || 0;
     div.textContent = `${input.toLocaleString()} in · ${output.toLocaleString()} out`;
     messagesInner.appendChild(div);
+    updateContextDisplay(input);
   }
 
   function esc(s) {
@@ -758,6 +777,9 @@
 
   function attachSession(id, session) {
     currentSessionId = id;
+    currentTokens = 0;
+    contextTokens.style.display = "none";
+    compactBtn.style.display = "none";
     finishedUnread.delete(id);
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
@@ -983,6 +1005,11 @@
   }
 
   cancelBtn.addEventListener("click", () => wsSend({ action: "cancel" }));
+
+  compactBtn.addEventListener("click", () => {
+    if (!currentSessionId) return;
+    wsSend({ action: "compact" });
+  });
 
   sendBtn.addEventListener("click", sendMessage);
   msgInput.addEventListener("keydown", (e) => {

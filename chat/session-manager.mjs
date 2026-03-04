@@ -258,8 +258,15 @@ export function sendMessage(sessionId, text, images, options = {}) {
     spawnOptions.thinking = true;
   }
 
+  // If a compact context exists, inject the old text history as preamble
+  let actualText = text;
+  if (live.compactContext) {
+    actualText = `[Previous conversation — tool results removed for context compression]\n\n${live.compactContext}\n\n---\n\nContinuing: ${text}`;
+    live.compactContext = undefined;
+  }
+
   console.log(`[session-mgr] Spawning tool=${effectiveTool} folder=${session.folder} thinking=${!!options.thinking}`);
-  const runner = spawnTool(effectiveTool, session.folder, text, onEvent, onExit, spawnOptions);
+  const runner = spawnTool(effectiveTool, session.folder, actualText, onEvent, onExit, spawnOptions);
   live.runner = runner;
 }
 
@@ -288,6 +295,47 @@ export function cancelSession(sessionId) {
  */
 export function getHistory(sessionId) {
   return loadHistory(sessionId);
+}
+
+/**
+ * Compact a session: strip tool results, reset Claude context.
+ * On the next sendMessage, the text-only history is injected as a preamble
+ * so Claude has conversation continuity in a fresh session.
+ */
+export function compactSession(sessionId) {
+  const session = getSession(sessionId);
+  if (!session) return false;
+
+  const history = loadHistory(sessionId);
+  const textEvents = history.filter(e => e.type === 'message');
+
+  // Build a plain transcript from text messages only
+  const transcript = textEvents
+    .map(e => `[${e.role === 'user' ? 'User' : 'Assistant'}]: ${e.content || ''}`)
+    .join('\n\n');
+
+  let live = liveSessions.get(sessionId);
+  if (!live) {
+    live = { status: 'idle', runner: null, listeners: new Set() };
+    liveSessions.set(sessionId, live);
+  }
+
+  // Clear Claude/Codex resume IDs so the next call starts a fresh session
+  live.claudeSessionId = undefined;
+  live.codexThreadId = undefined;
+
+  // Store transcript for injection on next sendMessage
+  if (transcript.trim()) {
+    live.compactContext = transcript;
+  }
+
+  const kept = textEvents.length;
+  const dropped = history.length - kept;
+  const evt = statusEvent(`Context compacted — ${dropped} tool events removed, ${kept} messages kept`);
+  appendEvent(sessionId, evt);
+  broadcast(sessionId, { type: 'event', event: evt });
+
+  return true;
 }
 
 /**

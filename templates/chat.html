@@ -544,6 +544,15 @@ body {
 .thinking-toggle.active {
   background: var(--bg-tertiary); border-color: var(--border-strong); color: var(--text);
 }
+#contextTokens {
+  font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
+}
+.compact-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 11px; cursor: pointer; padding: 2px 7px; border-radius: 4px;
+  line-height: 1.4; white-space: nowrap; flex-shrink: 0; font-family: inherit;
+}
+.compact-btn:hover { border-color: var(--border-strong); color: var(--text-secondary); }
 .input-config-row .img-btn {
   width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border);
   background: transparent; color: var(--text-muted); font-size: 14px;
@@ -640,6 +649,8 @@ body {
   <h1 id="headerTitle">RemoteLab Chat</h1>
   <span class="status-dot" id="statusDot"></span>
   <span id="statusText">disconnected</span>
+  <span id="contextTokens" style="display:none"></span>
+  <button class="compact-btn" id="compactBtn" style="display:none">Compact</button>
 </div>
 
 <div class="app-container">

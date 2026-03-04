@@ -3,7 +3,7 @@ import { isAuthenticated, parseCookies } from '../lib/auth.mjs';
 import {
   createSession, deleteSession, getSession, listSessions,
   subscribe, unsubscribe, sendMessage, cancelSession, getHistory,
-  renameSession,
+  renameSession, compactSession,
 } from './session-manager.mjs';
 
 /**
@@ -166,6 +166,16 @@ function handleMessage(ws, msg, ctx) {
         return;
       }
       cancelSession(sessionId);
+      break;
+    }
+
+    case 'compact': {
+      const sessionId = ctx.getAttached();
+      if (!sessionId) {
+        wsSend(ws, { type: 'error', message: 'Not attached to a session' });
+        return;
+      }
+      compactSession(sessionId);
       break;
     }
 
