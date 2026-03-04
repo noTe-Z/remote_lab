@@ -240,6 +240,7 @@
 
       case "deleted":
         sessions = sessions.filter((s) => s.id !== msg.sessionId);
+        localStorage.removeItem(`draft_${msg.sessionId}`);
         if (currentSessionId === msg.sessionId) {
           messageQueue = [];
           currentSessionId = null;
@@ -722,6 +723,7 @@
       localStorage.setItem("selectedTool", selectedTool);
     }
 
+    restoreDraft();
     msgInput.focus();
     renderSessionList();
   }
@@ -922,6 +924,7 @@
       messageQueue.push(msg);
     }
     msgInput.value = "";
+    clearDraft();
     autoResizeInput();
   }
 
@@ -945,7 +948,28 @@
     const newH = Math.min(Math.max(msgInput.scrollHeight, minH), maxH);
     msgInput.style.height = newH + "px";
   }
-  msgInput.addEventListener("input", autoResizeInput);
+  // ---- Draft persistence ----
+  function saveDraft() {
+    if (!currentSessionId) return;
+    localStorage.setItem(`draft_${currentSessionId}`, msgInput.value);
+  }
+  function restoreDraft() {
+    if (!currentSessionId) return;
+    const draft = localStorage.getItem(`draft_${currentSessionId}`);
+    if (draft) {
+      msgInput.value = draft;
+      autoResizeInput();
+    }
+  }
+  function clearDraft() {
+    if (!currentSessionId) return;
+    localStorage.removeItem(`draft_${currentSessionId}`);
+  }
+
+  msgInput.addEventListener("input", () => {
+    autoResizeInput();
+    saveDraft();
+  });
   // Set initial height
   requestAnimationFrame(() => autoResizeInput());
 
