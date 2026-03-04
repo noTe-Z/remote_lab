@@ -43,6 +43,7 @@
   let reconnectTimer = null;
   let sessions = [];
   let pendingSummary = new Set(); // sessionIds awaiting summary generation
+  let finishedUnread = new Set(); // sessionIds finished but not yet opened
   let lastSidebarUpdatedAt = {}; // sessionId -> last known updatedAt
   let messageQueue = []; // messages queued while disconnected
 
@@ -60,9 +61,13 @@
   let currentThinkingBlock = null; // { el, body, tools: Set }
   let inThinkingBlock = false;
 
-  // ---- Browser Notifications ----
+  // ---- Browser Notifications + Web Push ----
   if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission();
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") setupPushNotifications();
+    });
+  } else if ("Notification" in window && Notification.permission === "granted") {
+    setupPushNotifications();
   }
 
   function notifyCompletion(session) {
@@ -70,14 +75,52 @@
       return;
     if (document.visibilityState === "visible") return;
     const folder = (session?.folder || "").split("/").pop() || "Session";
+    const name = session?.name || folder;
     const n = new Notification("RemoteLab", {
-      body: `${folder} — task completed`,
+      body: `${name} — task completed`,
       tag: "remotelab-done",
     });
     n.onclick = () => {
       window.focus();
       n.close();
     };
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding)
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++)
+      outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  async function setupPushNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) return; // already subscribed
+      const res = await fetch("/api/push/vapid-public-key");
+      if (!res.ok) return;
+      const { publicKey } = await res.json();
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      console.log("[push] Subscribed to web push");
+    } catch (err) {
+      console.warn("[push] Setup failed:", err.message);
+    }
   }
 
   // ---- Responsive layout ----
@@ -213,6 +256,15 @@
             sessionStatus === "idle"
           ) {
             notifyCompletion(msg.session);
+          }
+          // Mark finished-unread for sessions that completed without being viewed
+          if (wasRunning && msg.session.status === "idle") {
+            const isActiveAndVisible =
+              msg.session.id === currentSessionId &&
+              document.visibilityState === "visible";
+            if (!isActiveAndVisible) {
+              finishedUnread.add(msg.session.id);
+            }
           }
           // Mark as pending summary when any session goes running → idle
           if (wasRunning && msg.session.status === "idle") {
@@ -623,8 +675,9 @@
         const metaParts = [];
         if (s.name && s.tool) metaParts.push(s.tool);
         if (s.status === "running") metaParts.push("●&nbsp;running");
-        const metaHtml =
-          s.status === "running"
+        const metaHtml = finishedUnread.has(s.id)
+          ? `<span class="status-done">● done</span>`
+          : s.status === "running"
             ? `<span class="status-running">● running</span>`
             : s.tool && s.name
               ? `<span>${esc(s.tool)}</span>`
@@ -705,6 +758,7 @@
 
   function attachSession(id, session) {
     currentSessionId = id;
+    finishedUnread.delete(id);
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
 

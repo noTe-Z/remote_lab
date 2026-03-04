@@ -6,6 +6,7 @@ import { spawnTool } from './process-runner.mjs';
 import { loadHistory, appendEvent } from './history.mjs';
 import { messageEvent, statusEvent } from './normalizer.mjs';
 import { triggerSummary, removeSidebarEntry } from './summarizer.mjs';
+import { sendCompletionPush } from './push.mjs';
 
 const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
 
@@ -231,11 +232,13 @@ export function sendMessage(sessionId, text, images, options = {}) {
       type: 'session',
       session: { ...session, status: 'idle' },
     });
-    // Trigger async sidebar summary (non-blocking, does not affect session flow)
+    // Trigger async sidebar summary (non-blocking)
     triggerSummary(
       { id: sessionId, folder: session.folder, name: session.name || '' },
       (newName) => renameSession(sessionId, newName),
     );
+    // Send web push notification (non-blocking)
+    sendCompletionPush({ ...session, id: sessionId }).catch(() => {});
   };
 
   const spawnOptions = {};

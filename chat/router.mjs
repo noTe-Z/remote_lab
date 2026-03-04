@@ -11,6 +11,7 @@ import {
 import { getAvailableTools } from '../lib/tools.mjs';
 import { listSessions, getSession, createSession, deleteSession } from './session-manager.mjs';
 import { getSidebarState } from './summarizer.mjs';
+import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
 import {
   getClientIp, isRateLimited, recordFailedAttempt, clearFailedAttempts,
@@ -29,6 +30,7 @@ const staticMimeTypes = {
   'apple-touch-icon.png': 'image/png',
   'chat.js': 'application/javascript',
   'marked.min.js': 'application/javascript',
+  'sw.js': 'application/javascript',
 };
 
 export async function handleRequest(req, res) {
@@ -287,6 +289,33 @@ export async function handleRequest(req, res) {
       'Cache-Control': 'public, max-age=31536000, immutable',
     });
     res.end(readFileSync(filepath));
+    return;
+  }
+
+  // Push notification API
+  if (pathname === '/api/push/vapid-public-key' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ publicKey: getPublicKey() }));
+    return;
+  }
+
+  if (pathname === '/api/push/subscribe' && req.method === 'POST') {
+    let body;
+    try { body = await readBody(req, 4096); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
+    try {
+      const sub = JSON.parse(body);
+      if (!sub.endpoint) throw new Error('Missing endpoint');
+      addSubscription(sub);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid subscription' }));
+    }
     return;
   }
 
