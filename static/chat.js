@@ -13,7 +13,6 @@
   const newSessionModal = document.getElementById("newSessionModal");
   const folderInput = document.getElementById("folderInput");
   const folderSuggestions = document.getElementById("folderSuggestions");
-  const nameInput = document.getElementById("nameInput");
   const toolSelect = document.getElementById("toolSelect");
   const cancelModal = document.getElementById("cancelModal");
   const createSessionBtn = document.getElementById("createSession");
@@ -579,9 +578,8 @@
         newSessionModal.classList.add("open");
         loadTools();
         folderInput.value = folder;
-        nameInput.value = "";
         folderSuggestions.innerHTML = "";
-        nameInput.focus();
+        folderInput.focus();
       });
 
       const items = document.createElement("div");
@@ -720,7 +718,6 @@
     newSessionModal.classList.add("open");
     loadTools();
     folderInput.value = "";
-    nameInput.value = "";
     folderSuggestions.innerHTML = "";
     folderInput.focus();
   });
@@ -735,12 +732,11 @@
   createSessionBtn.addEventListener("click", () => {
     const folder = folderInput.value.trim();
     const tool = toolSelect.value;
-    const name = nameInput.value.trim();
     if (!folder) {
       folderInput.focus();
       return;
     }
-    wsSend({ action: "create", folder, tool, name });
+    wsSend({ action: "create", folder, tool });
     newSessionModal.classList.remove("open");
 
     const handler = (e) => {

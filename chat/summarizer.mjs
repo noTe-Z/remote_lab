@@ -97,15 +97,16 @@ function formatTurnForPrompt(events) {
 /**
  * Trigger a non-blocking summary generation after a session turn completes.
  * sessionMeta: { id, folder, name }
+ * onRename: optional callback (newName: string) => void — called when a better name is generated
  */
-export function triggerSummary(sessionMeta) {
+export function triggerSummary(sessionMeta, onRename) {
   console.log(`[summarizer] triggerSummary called for session ${sessionMeta.id?.slice(0, 8)}`);
-  setImmediate(() => runSummary(sessionMeta).catch(err => {
+  setImmediate(() => runSummary(sessionMeta, onRename).catch(err => {
     console.error(`[summarizer] Unexpected error for ${sessionMeta.id?.slice(0, 8)}: ${err.message}`);
   }));
 }
 
-async function runSummary(sessionMeta) {
+async function runSummary(sessionMeta, onRename) {
   const { id: sessionId, folder, name } = sessionMeta;
 
   const allEvents = loadHistory(sessionId);
@@ -124,6 +125,7 @@ async function runSummary(sessionMeta) {
   const state = loadSidebarState();
   const prevBackground = state.sessions[sessionId]?.background || '';
 
+  const isDefaultName = !name || name === 'new session';
   const prompt = [
     'You are updating a developer\'s session status board. Be extremely concise.',
     '',
@@ -134,12 +136,13 @@ async function runSummary(sessionMeta) {
     'Last turn:',
     turnText,
     '',
-    'Write a JSON object with exactly these two fields:',
+    'Write a JSON object with exactly these fields:',
     '- "background": One sentence — what is this session working on overall? Update if this turn changes the focus.',
     '- "lastAction": One sentence — the single most important thing that just happened.',
+    isDefaultName ? '- "title": 2-5 words — a short descriptive title for this session (e.g. "Fix auth bug", "Add dark mode", "Refactor API layer"). No quotes around the title.' : '',
     '',
     'Respond with ONLY valid JSON. No markdown, no explanation.',
-  ].filter(l => l !== null).join('\n');
+  ].filter(l => l !== null && l !== '').join('\n');
 
   const claudeCmd = resolveClaudeCmd();
   console.log(`[summarizer] Calling Claude CLI (${claudeCmd}) for session ${sessionId.slice(0, 8)}`);
@@ -218,6 +221,15 @@ async function runSummary(sessionMeta) {
   };
   saveSidebarState(state);
   console.log(`[summarizer] Updated sidebar for session ${sessionId.slice(0, 8)}: ${summary.lastAction}`);
+
+  // Auto-rename session if it still has the default name and a title was generated
+  if (onRename && summary.title && isDefaultName) {
+    const newName = summary.title.trim();
+    if (newName) {
+      console.log(`[summarizer] Auto-renaming session ${sessionId.slice(0, 8)} to: ${newName}`);
+      onRename(newName);
+    }
+  }
 }
 
 export function getSidebarState() {

@@ -72,13 +72,13 @@ export function getSession(id) {
   };
 }
 
-export function createSession(folder, tool, name = '') {
+export function createSession(folder, tool, name = 'new session') {
   const id = generateId();
   const session = {
     id,
     folder,
     tool,
-    name: name || '',
+    name: name || 'new session',
     created: new Date().toISOString(),
   };
 
@@ -232,7 +232,10 @@ export function sendMessage(sessionId, text, images, options = {}) {
       session: { ...session, status: 'idle' },
     });
     // Trigger async sidebar summary (non-blocking, does not affect session flow)
-    triggerSummary({ id: sessionId, folder: session.folder, name: session.name || '' });
+    triggerSummary(
+      { id: sessionId, folder: session.folder, name: session.name || '' },
+      (newName) => renameSession(sessionId, newName),
+    );
   };
 
   const spawnOptions = {};
