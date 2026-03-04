@@ -187,12 +187,13 @@ body {
 }
 .folder-group-header.collapsed + .folder-group-items { display: none; }
 .folder-add-btn {
-  background: none; border: none; color: var(--text-muted); cursor: pointer;
-  font-size: 15px; padding: 1px 5px; border-radius: 4px; line-height: 1;
-  opacity: 0; transition: opacity 0.1s; flex-shrink: 0;
+  background: var(--bg-tertiary); border: 1px solid var(--border);
+  color: var(--text-secondary); cursor: pointer;
+  font-size: 13px; padding: 1px 7px; border-radius: 5px; line-height: 1.5;
+  flex-shrink: 0; font-weight: 600;
 }
-.folder-group-header:hover .folder-add-btn { opacity: 1; }
-.folder-add-btn:hover { background: var(--bg-tertiary); color: var(--text); }
+.folder-add-btn:hover { background: var(--bg); border-color: var(--border-strong); color: var(--text); }
+.folder-add-btn:active { opacity: 0.7; }
 
 .session-item {
   padding: 7px 8px 7px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 1px;
@@ -481,11 +482,41 @@ body {
 /* ---- Input area ---- */
 .input-area {
   flex-shrink: 0;
-  padding: 10px 16px;
+  padding: 0 16px 10px;
   padding-bottom: calc(10px + var(--safe-bottom));
   background: var(--bg);
   border-top: 1px solid var(--border);
 }
+
+/* Resize handle */
+.input-resize-handle {
+  height: 18px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 -16px 8px;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.input-resize-pill {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border); transition: background 0.15s;
+  pointer-events: none;
+}
+.input-resize-handle:hover .input-resize-pill { background: var(--border-strong); }
+.input-resize-handle:active .input-resize-pill { background: var(--text-muted); }
+
+/* Resized state: textarea fills the explicit height */
+.input-area.is-resized { display: flex; flex-direction: column; }
+.input-area.is-resized .input-wrapper {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+}
+.input-area.is-resized .input-config-row { flex-shrink: 0; }
+.input-area.is-resized .input-row { flex: 1; min-height: 0; align-items: stretch; }
+.input-area.is-resized .input-row textarea { flex: 1; max-height: none; }
+.input-area.is-resized .send-btn,
+.input-area.is-resized .cancel-btn { align-self: flex-end; }
 .input-wrapper {
   max-width: var(--content-max);
   margin: 0 auto;
@@ -596,7 +627,8 @@ body {
   }
 
   .messages { padding: 28px 32px; }
-  .input-area { padding: 14px 32px; padding-bottom: calc(14px + var(--safe-bottom)); }
+  .input-area { padding: 0 32px 14px; padding-bottom: calc(14px + var(--safe-bottom)); }
+  .input-resize-handle { margin: 0 -32px 10px; }
 }
 </style>
 </head>
@@ -642,6 +674,9 @@ body {
 
     <!-- Input area -->
     <div class="input-area" id="inputArea">
+      <div class="input-resize-handle" id="inputResizeHandle">
+        <div class="input-resize-pill"></div>
+      </div>
       <div class="input-wrapper">
         <!-- Image preview inside wrapper -->
         <div class="img-preview-strip" id="imgPreviewStrip"></div>

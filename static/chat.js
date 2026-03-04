@@ -33,6 +33,8 @@
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
   const progressPanel = document.getElementById("progressPanel");
+  const inputArea = document.getElementById("inputArea");
+  const inputResizeHandle = document.getElementById("inputResizeHandle");
 
   let ws = null;
   let pendingImages = [];
@@ -42,6 +44,7 @@
   let sessions = [];
   let pendingSummary = new Set(); // sessionIds awaiting summary generation
   let lastSidebarUpdatedAt = {}; // sessionId -> last known updatedAt
+  let messageQueue = []; // messages queued while disconnected
 
   let selectedTool = localStorage.getItem("selectedTool") || null;
   // Default thinking to enabled; only disable if explicitly set to 'false'
@@ -151,6 +154,11 @@
           JSON.stringify({ action: "attach", sessionId: currentSessionId }),
         );
       }
+      // Flush messages queued while disconnected
+      for (const m of messageQueue) {
+        ws.send(JSON.stringify(m));
+      }
+      messageQueue = [];
     };
 
     ws.onmessage = (e) => {
@@ -233,6 +241,7 @@
       case "deleted":
         sessions = sessions.filter((s) => s.id !== msg.sessionId);
         if (currentSessionId === msg.sessionId) {
+          messageQueue = [];
           currentSessionId = null;
           clearMessages();
           showEmpty();
@@ -250,10 +259,13 @@
   function updateStatus(connState, sessState) {
     if (connState === "disconnected") {
       statusDot.className = "status-dot";
-      statusText.textContent = "disconnected";
-      msgInput.disabled = true;
-      sendBtn.style.display = "";
-      sendBtn.disabled = true;
+      statusText.textContent = "reconnecting…";
+      // Keep input usable if we have a session — messages will be queued
+      if (!currentSessionId) {
+        msgInput.disabled = true;
+        sendBtn.style.display = "";
+        sendBtn.disabled = true;
+      }
       cancelBtn.style.display = "none";
       return;
     }
@@ -574,12 +586,28 @@
       });
       header.querySelector(".folder-add-btn").addEventListener("click", (e) => {
         e.stopPropagation();
+        const tool = selectedTool || toolsList[0]?.id;
+        if (!tool) {
+          // No tool loaded yet — fallback to modal
+          if (!isDesktop) closeSidebarFn();
+          newSessionModal.classList.add("open");
+          loadTools();
+          folderInput.value = folder;
+          folderSuggestions.innerHTML = "";
+          return;
+        }
         if (!isDesktop) closeSidebarFn();
-        newSessionModal.classList.add("open");
-        loadTools();
-        folderInput.value = folder;
-        folderSuggestions.innerHTML = "";
-        folderInput.focus();
+        wsSend({ action: "create", folder, tool });
+        const handler = (evt) => {
+          let msg;
+          try { msg = JSON.parse(evt.data); } catch { return; }
+          if (msg.type === "session" && msg.session) {
+            ws.removeEventListener("message", handler);
+            attachSession(msg.session.id, msg.session);
+            wsSend({ action: "list" });
+          }
+        };
+        ws.addEventListener("message", handler);
       });
 
       const items = document.createElement("div");
@@ -888,7 +916,11 @@
       pendingImages = [];
       renderImagePreviews();
     }
-    wsSend(msg);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    } else {
+      messageQueue.push(msg);
+    }
     msgInput.value = "";
     autoResizeInput();
   }
@@ -905,6 +937,7 @@
 
   // Auto-resize textarea: 3 lines default, 10 lines max
   function autoResizeInput() {
+    if (inputArea.classList.contains("is-resized")) return;
     msgInput.style.height = "auto";
     const lineH = parseFloat(getComputedStyle(msgInput).lineHeight) || 24;
     const minH = lineH * 3;
@@ -1058,6 +1091,59 @@
       lastProgressState = state;
       renderProgressPanel(state);
     } catch {}
+  }
+
+  // ---- Input area resize ----
+  const INPUT_MIN_H = 100;
+  let isResizingInput = false;
+  let resizeStartY = 0;
+  let resizeStartH = 0;
+
+  function getInputMaxH() {
+    return Math.floor(window.innerHeight * 0.72);
+  }
+
+  function onInputResizeStart(e) {
+    isResizingInput = true;
+    resizeStartY = e.touches ? e.touches[0].clientY : e.clientY;
+    resizeStartH = inputArea.getBoundingClientRect().height;
+    document.addEventListener("mousemove", onInputResizeMove);
+    document.addEventListener("touchmove", onInputResizeMove, { passive: false });
+    document.addEventListener("mouseup", onInputResizeEnd);
+    document.addEventListener("touchend", onInputResizeEnd);
+    e.preventDefault();
+  }
+
+  function onInputResizeMove(e) {
+    if (!isResizingInput) return;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const dy = resizeStartY - clientY; // drag up = positive dy = bigger height
+    const newH = Math.max(INPUT_MIN_H, Math.min(getInputMaxH(), resizeStartH + dy));
+    inputArea.style.height = newH + "px";
+    inputArea.classList.add("is-resized");
+    localStorage.setItem("inputAreaHeight", newH);
+    e.preventDefault();
+  }
+
+  function onInputResizeEnd() {
+    isResizingInput = false;
+    document.removeEventListener("mousemove", onInputResizeMove);
+    document.removeEventListener("touchmove", onInputResizeMove);
+    document.removeEventListener("mouseup", onInputResizeEnd);
+    document.removeEventListener("touchend", onInputResizeEnd);
+  }
+
+  inputResizeHandle.addEventListener("mousedown", onInputResizeStart);
+  inputResizeHandle.addEventListener("touchstart", onInputResizeStart, { passive: false });
+
+  // Restore saved height
+  const savedInputH = localStorage.getItem("inputAreaHeight");
+  if (savedInputH) {
+    const h = parseInt(savedInputH, 10);
+    if (h >= INPUT_MIN_H && h <= getInputMaxH()) {
+      inputArea.style.height = h + "px";
+      inputArea.classList.add("is-resized");
+    }
   }
 
   // ---- Init ----
