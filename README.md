@@ -10,18 +10,18 @@ Control AI coding tools (Claude Code, Codex, Cline) from your phone mac or any o
 
 ### What it does
 
-RemoteLab runs a lightweight web server on your Mac. You point a Cloudflare tunnel at it, get an HTTPS URL, and from any browser (phone, tablet, whatever) you can open a chat interface that talks to Claude Code running on your machine.
+RemoteLab runs a lightweight web server on your **Mac or Linux server**. You point a Cloudflare tunnel at it, get an HTTPS URL, and from any browser (phone, tablet, whatever) you can open a chat interface that talks to Claude Code running on your machine.
 
 Your sessions persist across disconnects. History is kept on disk. Multiple folders, multiple sessions, running in parallel.
 
 ### Get set up in 5 minutes — hand it to an AI
 
-The fastest way to set this up is to paste the following prompt into Claude Code on your Mac. The AI handles everything automatically. The only thing it'll stop and ask you for is a browser login to Cloudflare (unavoidable — they need to confirm you own the domain).
+The fastest way to set this up is to paste the following prompt into Claude Code on your Mac or Linux server. The AI handles everything automatically. The only thing it'll stop and ask you for is a browser login to Cloudflare (unavoidable — they need to confirm you own the domain).
 
 **Prerequisites before you paste the prompt:**
-- macOS with Homebrew installed
-- Node.js 18+
-- At least one AI tool installed (`claude`, `codex`)
+- **macOS**: Homebrew installed + Node.js 18+
+- **Linux**: Node.js 18+ + `dtach` + `ttyd` (the setup wizard can install these automatically)
+- At least one AI tool installed (`claude`, `codex`, `cline`, …)
 - A domain pointed at Cloudflare ([free account](https://cloudflare.com), domain ~$1–12/yr from Namecheap or Porkbun)
 
 ---
@@ -56,7 +56,7 @@ Open `https://[subdomain].[domain]/?token=YOUR_TOKEN` on your phone:
 
 ### Daily usage
 
-Once set up, the service auto-starts on Mac boot. Just open the URL on your phone.
+Once set up, the service auto-starts on boot (macOS LaunchAgent / Linux systemd). Just open the URL on your phone.
 
 ```
 remotelab start          # start all services
@@ -122,9 +122,10 @@ remotelab --help               Show help
 | `~/.config/claude-web/auth.json` | Access token + password hash |
 | `~/.config/claude-web/chat-sessions.json` | Chat session metadata |
 | `~/.config/claude-web/chat-history/` | Per-session event logs (JSONL) |
-| `~/Library/Logs/chat-server.log` | Chat server stdout |
-| `~/Library/Logs/auth-proxy.log` | Auth proxy stdout |
-| `~/Library/Logs/cloudflared.log` | Tunnel stdout |
+| `~/Library/Logs/chat-server.log` | Chat server stdout **(macOS)** |
+| `~/.local/share/remotelab/logs/chat-server.log` | Chat server stdout **(Linux)** |
+| `~/Library/Logs/cloudflared.log` | Tunnel stdout **(macOS)** |
+| `~/.local/share/remotelab/logs/cloudflared.log` | Tunnel stdout **(Linux)** |
 
 ## Security
 
@@ -138,10 +139,16 @@ remotelab --help               Show help
 
 ## Troubleshooting
 
-**Service won't start:**
+**Service won't start (macOS):**
 ```bash
 tail -50 ~/Library/Logs/chat-server.error.log
 tail -50 ~/Library/Logs/auth-proxy.error.log
+```
+
+**Service won't start (Linux):**
+```bash
+journalctl --user -u remotelab-chat -n 50
+tail -50 ~/.local/share/remotelab/logs/chat-server.error.log
 ```
 
 **DNS not resolving:** Wait 5–30 minutes after setup. Verify: `dig SUBDOMAIN.DOMAIN +short`
