@@ -1,15 +1,15 @@
-import { existsSync, statSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, statSync, readdirSync, readFileSync, mkdirSync, writeFileSync, appendFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve, dirname, basename, extname } from 'path';
 import { parse as parseUrl, fileURLToPath } from 'url';
-import { SESSION_EXPIRY, CHAT_IMAGES_DIR } from '../lib/config.mjs';
+import { SESSION_EXPIRY, CHAT_IMAGES_DIR, CHAT_HISTORY_DIR } from '../lib/config.mjs';
 import {
   sessions, saveAuthSessions,
   verifyToken, verifyPassword, generateToken,
   parseCookies, setCookie, clearCookie,
 } from '../lib/auth.mjs';
 import { getAvailableTools } from '../lib/tools.mjs';
-import { listSessions, getSession, createSession, deleteSession } from './session-manager.mjs';
+import { listSessions, getSession, createSession, deleteSession, markMemoryStatus } from './session-manager.mjs';
 import { getSidebarState } from './summarizer.mjs';
 import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
@@ -23,7 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const chatTemplatePath = join(__dirname, '..', 'templates', 'chat.html');
 const loginTemplatePath = join(__dirname, '..', 'templates', 'login.html');
 const staticDir = join(__dirname, '..', 'static');
-const ASSISTANT_DIR = join(homedir(), 'development-assistant');
+const ASSISTANT_DIR = join(homedir(), 'Development', 'assistant');
 
 const staticMimeTypes = {
   'manifest.json': 'application/manifest+json',
@@ -196,6 +196,34 @@ export async function handleRequest(req, res) {
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Session not found' }));
+    }
+    return;
+  }
+
+  // PATCH /api/sessions/:id/memory-status - mark session memory status
+  if (pathname.match(/^\/api\/sessions\/[^/]+\/memory-status$/) && req.method === 'POST') {
+    const id = pathname.split('/')[3];
+    let body;
+    try { body = await readBody(req, 1024); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
+    try {
+      const { saved, ignored } = JSON.parse(body);
+      // Both saved and ignored set pendingMemory to false
+      const pendingMemory = !(saved || ignored);
+      const updated = markMemoryStatus(id, pendingMemory);
+      if (updated) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, session: updated }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+      }
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid request body' }));
     }
     return;
   }
@@ -467,6 +495,127 @@ You are the user's personal assistant, focused on helping with development tasks
       console.error('Error initializing assistant directory:', err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to initialize' }));
+    }
+    return;
+  }
+
+  // POST /api/files/save - save current conversation to memory files
+  if (pathname === '/api/files/save' && req.method === 'POST') {
+    let body;
+    try { body = await readBody(req, 10240); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
+
+    try {
+      const { sessionId, summary, noteName, memoryUpdate, userUpdate } = JSON.parse(body);
+      if (!sessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'sessionId required' }));
+        return;
+      }
+
+      // Check if session is running in assistant directory
+      const session = getSession(sessionId);
+      if (!session) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+
+      // Normalize paths for comparison
+      const normalizedFolder = resolve(session.folder);
+      const normalizedAssistant = resolve(ASSISTANT_DIR);
+      if (normalizedFolder !== normalizedAssistant) {
+        // Session is not running in assistant directory - silently ignore
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, skipped: true, reason: 'Not assistant session' }));
+        return;
+      }
+
+      // Load conversation history
+      const historyPath = join(CHAT_HISTORY_DIR, `${sessionId}.json`);
+      if (!existsSync(historyPath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session history not found' }));
+        return;
+      }
+
+      const events = JSON.parse(readFileSync(historyPath, 'utf8'));
+
+      // Format conversation for log
+      const today = new Date().toISOString().slice(0, 10);
+      const timestamp = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+
+      // Build conversation text from events
+      let conversationText = '';
+      for (const ev of events) {
+        if (ev.type === 'message') {
+          const role = ev.role === 'user' ? '用户' : 'AI';
+          conversationText += `**${role}**: ${ev.content}\n\n`;
+        }
+      }
+
+      // Ensure directories exist
+      const logsDir = join(ASSISTANT_DIR, 'logs');
+      const notesDir = join(ASSISTANT_DIR, 'notes');
+      if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true });
+      if (!existsSync(notesDir)) mkdirSync(notesDir, { recursive: true });
+
+      // Build log entry with sessionId marker for future updates
+      const logEntry = `\n---\n\n<!-- session:${sessionId} -->\n\n## ${timestamp}\n\n${conversationText}`;
+      const logPath = join(logsDir, `${today}.md`);
+
+      if (!existsSync(logPath)) {
+        // Create new log file
+        writeFileSync(logPath, `# ${today}\n${logEntry}`, 'utf8');
+      } else {
+        // Check if this session already has an entry today
+        let existingLog = readFileSync(logPath, 'utf8');
+        const sessionMarker = `<!-- session:${sessionId} -->`;
+
+        if (existingLog.includes(sessionMarker)) {
+          // Replace existing entry for this session
+          // Pattern: ---\n\n<!-- session:xxx -->\n\n## HH:MM\n\n**content**
+          const entryPattern = new RegExp(
+            `\\n---\\n\\n${sessionMarker}\\n\\n## \\d{2}:\\d{2}\\n\\n([\\s\\S]*?)(?=\\n---\\n\\n<!-- session:|$)`,
+            'g'
+          );
+          existingLog = existingLog.replace(entryPattern, logEntry + '\n');
+          writeFileSync(logPath, existingLog, 'utf8');
+        } else {
+          // Append new entry
+          appendFileSync(logPath, logEntry, 'utf8');
+        }
+      }
+
+      // Update MEMORY.md if provided
+      if (memoryUpdate) {
+        const memoryPath = join(ASSISTANT_DIR, 'MEMORY.md');
+        const existing = existsSync(memoryPath) ? readFileSync(memoryPath, 'utf8') : '';
+        writeFileSync(memoryPath, existing + `\n\n${memoryUpdate}`, 'utf8');
+      }
+
+      // Update USER.md if provided
+      if (userUpdate) {
+        const userPath = join(ASSISTANT_DIR, 'USER.md');
+        const existing = existsSync(userPath) ? readFileSync(userPath, 'utf8') : '';
+        writeFileSync(userPath, existing + `\n\n${userUpdate}`, 'utf8');
+      }
+
+      // Create note if provided
+      if (noteName && summary) {
+        const notePath = join(notesDir, `${noteName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')}.md`);
+        writeFileSync(notePath, `# ${noteName}\n\n${summary}\n`, 'utf8');
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, savedTo: `${today}.md` }));
+    } catch (err) {
+      console.error('Error saving to memory:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to save' }));
     }
     return;
   }

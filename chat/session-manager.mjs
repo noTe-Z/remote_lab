@@ -1,12 +1,15 @@
 import { randomBytes } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
+import { homedir } from 'os';
 import { CHAT_SESSIONS_FILE, CHAT_IMAGES_DIR } from '../lib/config.mjs';
 import { spawnTool } from './process-runner.mjs';
 import { loadHistory, appendEvent } from './history.mjs';
 import { messageEvent, statusEvent } from './normalizer.mjs';
 import { triggerSummary, removeSidebarEntry } from './summarizer.mjs';
 import { sendCompletionPush } from './push.mjs';
+
+const ASSISTANT_DIR = join(homedir(), 'Development', 'assistant');
 
 const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
 
@@ -119,6 +122,22 @@ export function renameSession(id, name) {
 }
 
 /**
+ * Mark session memory status (saved or ignored).
+ * Used to track which sessions have pending content to save.
+ */
+export function markMemoryStatus(id, status) {
+  const metas = loadSessionsMeta();
+  const idx = metas.findIndex(m => m.id === id);
+  if (idx === -1) return null;
+  metas[idx].pendingMemory = status;
+  saveSessionsMeta(metas);
+  const live = liveSessions.get(id);
+  const updated = { ...metas[idx], status: live ? live.status : 'idle' };
+  broadcast(id, { type: 'session', session: updated });
+  return updated;
+}
+
+/**
  * Subscribe a WebSocket to session events.
  */
 export function subscribe(sessionId, ws) {
@@ -163,6 +182,16 @@ export function sendMessage(sessionId, text, images, options = {}) {
   // Determine effective tool: per-message override or session default
   const effectiveTool = options.tool || session.tool;
   console.log(`[session-mgr] sendMessage session=${sessionId.slice(0,8)} tool=${effectiveTool} (session.tool=${session.tool}) thinking=${!!options.thinking} text="${text.slice(0,80)}" images=${images?.length || 0}`);
+
+  // Mark pendingMemory for assistant directory sessions
+  if (session.folder === ASSISTANT_DIR) {
+    const metas = loadSessionsMeta();
+    const idx = metas.findIndex(m => m.id === sessionId);
+    if (idx !== -1 && !metas[idx].pendingMemory) {
+      metas[idx].pendingMemory = true;
+      saveSessionsMeta(metas);
+    }
+  }
 
   // Save images to disk
   const savedImages = saveImages(images);

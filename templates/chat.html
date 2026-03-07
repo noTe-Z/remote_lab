@@ -271,6 +271,17 @@ body {
 }
 .session-item-meta .status-running { color: var(--success); }
 .session-item-meta .status-done { color: #3b82f6; }
+.pending-memory-dot {
+  color: #d97706;
+  font-size: 10px;
+  margin-left: 6px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+.pending-memory-dot:hover {
+  opacity: 1;
+}
 .session-item-actions { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
 .session-action-btn {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
@@ -613,6 +624,13 @@ body {
   line-height: 1.4; white-space: nowrap; flex-shrink: 0; font-family: inherit;
 }
 .compact-btn:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+.save-memory-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  line-height: 1; white-space: nowrap; flex-shrink: 0;
+}
+.save-memory-btn:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+.save-memory-btn.saving { opacity: 0.5; cursor: wait; }
 .input-config-row .img-btn {
   width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border);
   background: transparent; color: var(--text-muted); font-size: 14px;
@@ -711,6 +729,7 @@ body {
   <span id="statusText">disconnected</span>
   <span id="contextTokens" style="display:none"></span>
   <button class="compact-btn" id="compactBtn" style="display:none">Compact</button>
+  <button class="save-memory-btn" id="saveMemoryBtn" style="display:none" title="Save to Memory">&#128190;</button>
 </div>
 
 <div class="app-container">

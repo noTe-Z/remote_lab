@@ -32,6 +32,7 @@
   const cancelBtn = document.getElementById("cancelBtn");
   const contextTokens = document.getElementById("contextTokens");
   const compactBtn = document.getElementById("compactBtn");
+  const saveMemoryBtn = document.getElementById("saveMemoryBtn");
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
   const tabFiles = document.getElementById("tabFiles");
@@ -66,6 +67,9 @@
   let collapsedFolders = JSON.parse(
     localStorage.getItem("collapsedFolders") || "{}",
   );
+
+  // Assistant directory for memory status indicator
+  const ASSISTANT_DIR = "/Users/chenyuan/Development/assistant";
 
   // Thinking block state
   let currentThinkingBlock = null; // { el, body, tools: Set }
@@ -609,6 +613,7 @@
       contextTokens.textContent = formatTokens(inputTokens);
       contextTokens.style.display = "";
       compactBtn.style.display = "";
+      saveMemoryBtn.style.display = "";
     }
   }
 
@@ -700,6 +705,11 @@
         const metaParts = [];
         if (s.name && s.tool) metaParts.push(s.tool);
         if (s.status === "running") metaParts.push("●&nbsp;running");
+
+        // Pending memory indicator for assistant directory sessions
+        const isAssistantSession = s.folder === ASSISTANT_DIR;
+        const showPendingMemory = isAssistantSession && s.pendingMemory;
+
         const metaHtml = finishedUnread.has(s.id)
           ? `<span class="status-done">● done</span>`
           : s.status === "running"
@@ -708,15 +718,28 @@
               ? `<span>${esc(s.tool)}</span>`
               : "";
 
+        const pendingMemoryDot = showPendingMemory
+          ? `<span class="pending-memory-dot" title="Click to dismiss, or save to memory" data-id="${s.id}">●</span>`
+          : "";
+
         div.innerHTML = `
           <div class="session-item-info">
-            <div class="session-item-name">${esc(displayName)}</div>
+            <div class="session-item-name">${esc(displayName)}${pendingMemoryDot}</div>
             <div class="session-item-meta">${metaHtml}</div>
           </div>
           <div class="session-item-actions">
             <button class="session-action-btn rename" title="Rename" data-id="${s.id}">&#9998;</button>
             <button class="session-action-btn del" title="Delete" data-id="${s.id}">&times;</button>
           </div>`;
+
+        // Handle pending memory dot click
+        const pendingDot = div.querySelector(".pending-memory-dot");
+        if (pendingDot) {
+          pendingDot.addEventListener("click", (e) => {
+            e.stopPropagation();
+            dismissPendingMemory(s.id);
+          });
+        }
 
         div.addEventListener("click", (e) => {
           if (
@@ -786,6 +809,7 @@
     currentTokens = 0;
     contextTokens.style.display = "none";
     compactBtn.style.display = "none";
+    saveMemoryBtn.style.display = "none";
     finishedUnread.delete(id);
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
@@ -808,6 +832,27 @@
     restoreDraft();
     msgInput.focus();
     renderSessionList();
+  }
+
+  // Dismiss pending memory indicator (user chose to ignore)
+  async function dismissPendingMemory(sessionId) {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/memory-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ignored: true }),
+      });
+      if (res.ok) {
+        // Update local state
+        const idx = sessions.findIndex((s) => s.id === sessionId);
+        if (idx >= 0) {
+          sessions[idx].pendingMemory = false;
+          renderSessionList();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to dismiss pending memory:", err);
+    }
   }
 
   // ---- Sidebar ----
@@ -1015,6 +1060,48 @@
   compactBtn.addEventListener("click", () => {
     if (!currentSessionId) return;
     wsSend({ action: "compact" });
+  });
+
+  // ---- Save to Memory ----
+  saveMemoryBtn.addEventListener("click", async () => {
+    if (!currentSessionId) return;
+    if (saveMemoryBtn.classList.contains("saving")) return;
+
+    saveMemoryBtn.classList.add("saving");
+    try {
+      const res = await fetch("/api/files/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: currentSessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // Clear pending memory status
+        const statusRes = await fetch(`/api/sessions/${currentSessionId}/memory-status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ saved: true }),
+        });
+        if (statusRes.ok) {
+          const idx = sessions.findIndex((s) => s.id === currentSessionId);
+          if (idx >= 0) sessions[idx].pendingMemory = false;
+        }
+        // Show brief success feedback
+        const origTitle = saveMemoryBtn.innerHTML;
+        saveMemoryBtn.innerHTML = "&#10003;";
+        saveMemoryBtn.style.color = "var(--success)";
+        setTimeout(() => {
+          saveMemoryBtn.innerHTML = origTitle;
+          saveMemoryBtn.style.color = "";
+        }, 1500);
+      } else {
+        alert("Failed to save: " + (data.error || "unknown error"));
+      }
+    } catch (err) {
+      alert("Failed to save: " + err.message);
+    } finally {
+      saveMemoryBtn.classList.remove("saving");
+    }
   });
 
   sendBtn.addEventListener("click", sendMessage);
