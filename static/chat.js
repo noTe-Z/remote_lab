@@ -34,9 +34,15 @@
   const compactBtn = document.getElementById("compactBtn");
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
+  const tabFiles = document.getElementById("tabFiles");
   const progressPanel = document.getElementById("progressPanel");
+  const filesPanel = document.getElementById("filesPanel");
   const inputArea = document.getElementById("inputArea");
   const inputResizeHandle = document.getElementById("inputResizeHandle");
+  const fileViewerModal = document.getElementById("fileViewerModal");
+  const fileViewerTitle = document.getElementById("fileViewerTitle");
+  const fileViewerContent = document.getElementById("fileViewerContent");
+  const fileViewerClose = document.getElementById("fileViewerClose");
 
   let ws = null;
   let pendingImages = [];
@@ -1055,7 +1061,7 @@
   requestAnimationFrame(() => autoResizeInput());
 
   // ---- Progress sidebar ----
-  let activeTab = "sessions"; // "sessions" | "progress"
+  let activeTab = "sessions"; // "sessions" | "progress" | "files"
   let progressPollTimer = null;
   let lastProgressState = { sessions: {} };
 
@@ -1063,9 +1069,11 @@
     activeTab = tab;
     tabSessions.classList.toggle("active", tab === "sessions");
     tabProgress.classList.toggle("active", tab === "progress");
+    tabFiles.classList.toggle("active", tab === "files");
     sessionList.style.display = tab === "sessions" ? "" : "none";
     progressPanel.classList.toggle("visible", tab === "progress");
-    newSessionBtn.classList.toggle("hidden", tab === "progress");
+    filesPanel.classList.toggle("visible", tab === "files");
+    newSessionBtn.classList.toggle("hidden", tab !== "sessions");
     if (tab === "progress") {
       fetchSidebarState();
       if (!progressPollTimer) {
@@ -1075,10 +1083,154 @@
       clearInterval(progressPollTimer);
       progressPollTimer = null;
     }
+    if (tab === "files") {
+      loadFilesPanel();
+    }
   }
 
   tabSessions.addEventListener("click", () => switchTab("sessions"));
   tabProgress.addEventListener("click", () => switchTab("progress"));
+  tabFiles.addEventListener("click", () => switchTab("files"));
+
+  // ---- Files Panel ----
+  async function loadFilesPanel() {
+    try {
+      const res = await fetch("/api/files");
+      const data = await res.json();
+
+      if (!data.exists) {
+        filesPanel.innerHTML = `
+          <div class="files-empty">
+            <p>Assistant directory not initialized.</p>
+            <button class="files-init-btn" id="initAssistantBtn">Initialize</button>
+          </div>
+        `;
+        document.getElementById("initAssistantBtn").addEventListener("click", initAssistant);
+        return;
+      }
+
+      let html = "";
+
+      // Main files section
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">Memory</div>`;
+      if (data.files["MEMORY.md"]?.exists) {
+        html += `<div class="files-item" data-file="MEMORY.md">
+          <span class="files-item-icon">&#128196;</span>
+          <span class="files-item-name">MEMORY.md</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // About Me
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">About Me</div>`;
+      if (data.files["USER.md"]?.exists) {
+        html += `<div class="files-item" data-file="USER.md">
+          <span class="files-item-icon">&#128100;</span>
+          <span class="files-item-name">USER.md</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // Today
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">Today</div>`;
+      const todayDate = new Date().toISOString().slice(0, 10);
+      if (data.todayLog?.exists) {
+        html += `<div class="files-item" data-file="${todayDate}.md">
+          <span class="files-item-icon">&#128197;</span>
+          <span class="files-item-name">${todayDate}</span>
+        </div>`;
+      } else {
+        html += `<div class="files-item" style="opacity:0.5;cursor:default">
+          <span class="files-item-icon">&#128197;</span>
+          <span class="files-item-name">${todayDate} (empty)</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // All Logs
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">All Logs (${data.logs.length})</div>`;
+      for (const log of data.logs.slice(0, 10)) {
+        html += `<div class="files-item" data-file="${log.name}">
+          <span class="files-item-icon">&#128196;</span>
+          <span class="files-item-name">${log.name.replace(".md", "")}</span>
+        </div>`;
+      }
+      if (data.logs.length > 10) {
+        html += `<div class="files-item" style="opacity:0.6;font-size:11px;cursor:default">
+          <span class="files-item-name">+ ${data.logs.length - 10} more</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // Notes
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">Notes (${data.notes.length})</div>`;
+      for (const note of data.notes) {
+        html += `<div class="files-item" data-file="${note.name}">
+          <span class="files-item-icon">&#128221;</span>
+          <span class="files-item-name">${note.name.replace(".md", "")}</span>
+        </div>`;
+      }
+      if (data.notes.length === 0) {
+        html += `<div class="files-item" style="opacity:0.5;cursor:default">
+          <span class="files-item-name">No notes yet</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      filesPanel.innerHTML = html;
+
+      // Add click handlers
+      filesPanel.querySelectorAll(".files-item[data-file]").forEach((item) => {
+        item.addEventListener("click", () => openFileViewer(item.dataset.file));
+      });
+    } catch (err) {
+      console.error("Failed to load files panel:", err);
+      filesPanel.innerHTML = `<div class="files-empty"><p>Failed to load files</p></div>`;
+    }
+  }
+
+  async function initAssistant() {
+    try {
+      const res = await fetch("/api/files/init", { method: "POST" });
+      if (res.ok) {
+        loadFilesPanel();
+      }
+    } catch (err) {
+      console.error("Failed to initialize:", err);
+    }
+  }
+
+  async function openFileViewer(filename) {
+    try {
+      const res = await fetch(`/api/files/content?f=${encodeURIComponent(filename)}`);
+      if (!res.ok) {
+        alert("Failed to load file");
+        return;
+      }
+      const data = await res.json();
+      fileViewerTitle.textContent = filename;
+      fileViewerContent.innerHTML = `<div class="md-content">${marked.parse(data.content || "")}</div>`;
+      fileViewerModal.classList.add("open");
+    } catch (err) {
+      console.error("Failed to open file:", err);
+    }
+  }
+
+  fileViewerClose.addEventListener("click", () => {
+    fileViewerModal.classList.remove("open");
+  });
+
+  fileViewerModal.addEventListener("click", (e) => {
+    if (e.target === fileViewerModal) {
+      fileViewerModal.classList.remove("open");
+    }
+  });
+  tabFiles.addEventListener("click", () => switchTab("files"));
 
   function relativeTime(ts) {
     const diff = Date.now() - ts;

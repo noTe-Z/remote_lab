@@ -1,6 +1,6 @@
-import { existsSync, statSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, statSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
-import { join, resolve, dirname, basename } from 'path';
+import { join, resolve, dirname, basename, extname } from 'path';
 import { parse as parseUrl, fileURLToPath } from 'url';
 import { SESSION_EXPIRY, CHAT_IMAGES_DIR } from '../lib/config.mjs';
 import {
@@ -23,6 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const chatTemplatePath = join(__dirname, '..', 'templates', 'chat.html');
 const loginTemplatePath = join(__dirname, '..', 'templates', 'login.html');
 const staticDir = join(__dirname, '..', 'static');
+const ASSISTANT_DIR = join(homedir(), 'development-assistant');
 
 const staticMimeTypes = {
   'manifest.json': 'application/manifest+json',
@@ -289,6 +290,184 @@ export async function handleRequest(req, res) {
       'Cache-Control': 'public, max-age=31536000, immutable',
     });
     res.end(readFileSync(filepath));
+    return;
+  }
+
+  // ---- Assistant Files API ----
+  // GET /api/files - list files in assistant directory
+  if (pathname === '/api/files' && req.method === 'GET') {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const result = {
+        exists: existsSync(ASSISTANT_DIR),
+        files: {},
+        logs: [],
+        notes: []
+      };
+
+      // Check main files
+      const mainFiles = ['CLAUDE.md', 'MEMORY.md', 'USER.md'];
+      for (const f of mainFiles) {
+        const fp = join(ASSISTANT_DIR, f);
+        if (existsSync(fp)) {
+          result.files[f] = {
+            exists: true,
+            size: statSync(fp).size,
+            mtime: statSync(fp).mtime
+          };
+        } else {
+          result.files[f] = { exists: false };
+        }
+      }
+
+      // Check today's log
+      const todayLogPath = join(ASSISTANT_DIR, 'logs', `${today}.md`);
+      result.todayLog = {
+        exists: existsSync(todayLogPath),
+        date: today
+      };
+
+      // List logs directory
+      const logsDir = join(ASSISTANT_DIR, 'logs');
+      if (existsSync(logsDir) && statSync(logsDir).isDirectory()) {
+        const entries = readdirSync(logsDir);
+        for (const e of entries) {
+          if (e.endsWith('.md')) {
+            const fp = join(logsDir, e);
+            result.logs.push({
+              name: e,
+              mtime: statSync(fp).mtime
+            });
+          }
+        }
+        result.logs.sort((a, b) => b.name.localeCompare(a.name)); // newest first
+      }
+
+      // List notes directory
+      const notesDir = join(ASSISTANT_DIR, 'notes');
+      if (existsSync(notesDir) && statSync(notesDir).isDirectory()) {
+        const entries = readdirSync(notesDir);
+        for (const e of entries) {
+          if (e.endsWith('.md')) {
+            const fp = join(notesDir, e);
+            result.notes.push({
+              name: e,
+              mtime: statSync(fp).mtime
+            });
+          }
+        }
+        result.notes.sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error('Error reading assistant files:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read assistant files' }));
+    }
+    return;
+  }
+
+  // GET /api/files/content?f=filename - read a specific file
+  if (pathname === '/api/files/content' && req.method === 'GET') {
+    const fileParam = parsedUrl.query.f;
+    if (!fileParam) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing file parameter' }));
+      return;
+    }
+
+    // Validate: only allow .md files, no path traversal
+    if (!fileParam.endsWith('.md') || fileParam.includes('..') || fileParam.includes('/')) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid file name' }));
+      return;
+    }
+
+    // Determine file path based on type
+    let filePath;
+    if (fileParam.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
+      // It's a log file
+      filePath = join(ASSISTANT_DIR, 'logs', fileParam);
+    } else {
+      // Main file or note
+      const mainFiles = ['CLAUDE.md', 'MEMORY.md', 'USER.md'];
+      if (mainFiles.includes(fileParam)) {
+        filePath = join(ASSISTANT_DIR, fileParam);
+      } else {
+        // It's a note
+        filePath = join(ASSISTANT_DIR, 'notes', fileParam);
+      }
+    }
+
+    if (!existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+      return;
+    }
+
+    try {
+      const content = readFileSync(filePath, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ content, file: fileParam }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read file' }));
+    }
+    return;
+  }
+
+  // POST /api/files/init - initialize assistant directory
+  if (pathname === '/api/files/init' && req.method === 'POST') {
+    try {
+      if (!existsSync(ASSISTANT_DIR)) {
+        mkdirSync(ASSISTANT_DIR, { recursive: true });
+      }
+      const logsDir = join(ASSISTANT_DIR, 'logs');
+      const notesDir = join(ASSISTANT_DIR, 'notes');
+      if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true });
+      if (!existsSync(notesDir)) mkdirSync(notesDir, { recursive: true });
+
+      // Create default CLAUDE.md if not exists
+      const claudeMdPath = join(ASSISTANT_DIR, 'CLAUDE.md');
+      if (!existsSync(claudeMdPath)) {
+        const defaultClaudeMd = `# Personal Assistant Rules
+
+## Identity
+You are the user's personal assistant, focused on helping with development tasks and thought collection.
+
+## Session End Protocol
+每次对话结束前，执行以下步骤：
+1. 将本次对话的核心内容追加到 logs/YYYY-MM-DD.md
+2. 判断是否有值得更新的用户偏好/习惯 → 更新 USER.md
+3. 判断是否有值得长期记忆的结论/想法 → 更新 MEMORY.md
+4. 如果出现明确的主题性内容，在 notes/ 下创建或更新对应 .md 文件
+
+## Session Start Protocol
+每次 session 开始时，读取 MEMORY.md 和 USER.md，作为上下文背景。
+`;
+        writeFileSync(claudeMdPath, defaultClaudeMd, 'utf8');
+      }
+
+      // Create empty MEMORY.md and USER.md if not exists
+      const memoryPath = join(ASSISTANT_DIR, 'MEMORY.md');
+      if (!existsSync(memoryPath)) {
+        writeFileSync(memoryPath, '# 长期记忆\n\n跨 session 的重要信息、结论、偏好。\n\n', 'utf8');
+      }
+
+      const userPath = join(ASSISTANT_DIR, 'USER.md');
+      if (!existsSync(userPath)) {
+        writeFileSync(userPath, '# 用户画像\n\n兴趣、习惯、沟通风格。\n\n', 'utf8');
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message: 'Assistant directory initialized' }));
+    } catch (err) {
+      console.error('Error initializing assistant directory:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to initialize' }));
+    }
     return;
   }
 
