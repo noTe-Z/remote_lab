@@ -146,11 +146,10 @@ export function buildClaudeArgs(prompt, options = {}) {
     args.push('--dangerously-skip-permissions');
   }
 
-  // Thinking: Claude Code enables extended thinking automatically on supported models.
-  // When thinking is requested, we use a model that supports it.
-  if (options.thinking) {
-    args.push('--model', 'sonnet');
-  }
+  // Note: We don't override the model here. Users configure their preferred model
+  // via ~/.claude.json (ANTHROPIC_MODEL env var or "model" field).
+  // Overriding with --model sonnet breaks compatibility with alternative API providers
+  // (e.g., Aliyun DashScope, OpenRouter) that use different model identifiers.
 
   return args;
 }
