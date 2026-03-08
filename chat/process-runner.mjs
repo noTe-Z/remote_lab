@@ -152,6 +152,14 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
   delete cleanEnv.CLAUDECODE;
   delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
 
+  // For official Claude tool, clear any Aliyun env vars that might be set globally
+  if (toolId === 'claude') {
+    delete cleanEnv.ANTHROPIC_AUTH_TOKEN;
+    delete cleanEnv.ANTHROPIC_BASE_URL;
+    delete cleanEnv.ANTHROPIC_MODEL;
+    console.log(`${TAG} Using official Anthropic API endpoint`);
+  }
+
   // Aliyun endpoint configuration for claude-aliyun tool
   if (toolId === 'claude-aliyun') {
     const aliyunConfig = loadAliyunConfig();
