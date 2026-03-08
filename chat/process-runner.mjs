@@ -99,7 +99,7 @@ function codexTurnLooksIncomplete(lastAgentMessage, hadFileChanges, hadCommands)
 
 export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {}) {
   const command = getToolCommand(toolId);
-  const isClaudeFamily = ['claude'].includes(toolId);
+  const isClaudeFamily = ['claude', 'claude-aliyun'].includes(toolId);
   const isCodexFamily = ['codex'].includes(toolId);
   const hasImages = options.images && options.images.length > 0;
 
@@ -136,6 +136,16 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
   const cleanEnv = { ...process.env, PATH: fullPath };
   delete cleanEnv.CLAUDECODE;
   delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+
+  // Aliyun endpoint configuration for claude-aliyun tool
+  if (toolId === 'claude-aliyun') {
+    Object.assign(cleanEnv, {
+      ANTHROPIC_AUTH_TOKEN: 'sk-sp-14925d50e26846858c1eeafe6e15054d',
+      ANTHROPIC_BASE_URL: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+      ANTHROPIC_MODEL: 'glm-5',
+    });
+    console.log(`${TAG} Using Aliyun API endpoint`);
+  }
 
   // Shared mutable state across potential auto-continue cycles
   const state = {
