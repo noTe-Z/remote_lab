@@ -1,5 +1,5 @@
 import { spawn, execFileSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { resolve, join } from 'path';
 import { createInterface } from 'readline';
@@ -7,6 +7,21 @@ import { createClaudeAdapter, buildClaudeArgs } from './adapters/claude.mjs';
 import { createCodexAdapter, buildCodexArgs } from './adapters/codex.mjs';
 import { statusEvent } from './normalizer.mjs';
 import { getToolCommand, fullPath } from '../lib/tools.mjs';
+
+// Aliyun config file path
+const ALIYUN_CONFIG_FILE = join(homedir(), '.config', 'claude-web', 'aliyun.json');
+
+function loadAliyunConfig() {
+  try {
+    if (existsSync(ALIYUN_CONFIG_FILE)) {
+      const config = JSON.parse(readFileSync(ALIYUN_CONFIG_FILE, 'utf8'));
+      return config;
+    }
+  } catch (err) {
+    console.error(`${TAG} Failed to load aliyun.json:`, err.message);
+  }
+  return null;
+}
 
 function resolveCwd(folder) {
   if (!folder || folder === '~') return homedir();
@@ -139,12 +154,19 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
 
   // Aliyun endpoint configuration for claude-aliyun tool
   if (toolId === 'claude-aliyun') {
-    Object.assign(cleanEnv, {
-      ANTHROPIC_AUTH_TOKEN: 'sk-sp-14925d50e26846858c1eeafe6e15054d',
-      ANTHROPIC_BASE_URL: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
-      ANTHROPIC_MODEL: 'glm-5',
-    });
-    console.log(`${TAG} Using Aliyun API endpoint`);
+    const aliyunConfig = loadAliyunConfig();
+    if (aliyunConfig && aliyunConfig.authToken) {
+      Object.assign(cleanEnv, {
+        ANTHROPIC_AUTH_TOKEN: aliyunConfig.authToken,
+        ANTHROPIC_BASE_URL: aliyunConfig.baseUrl || 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+        ANTHROPIC_MODEL: aliyunConfig.model || 'glm-5',
+      });
+      console.log(`${TAG} Using Aliyun API endpoint`);
+    } else {
+      console.error(`${TAG} Aliyun config not found or missing authToken`);
+      console.error(`${TAG} Please create ${ALIYUN_CONFIG_FILE} with your API key`);
+      onEvent(statusEvent('error: Aliyun API key not configured. See server logs.'));
+    }
   }
 
   // Shared mutable state across potential auto-continue cycles
