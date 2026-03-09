@@ -27,6 +27,7 @@
   const imgBtn = document.getElementById("imgBtn");
   const imgFileInput = document.getElementById("imgFileInput");
   const imgPreviewStrip = document.getElementById("imgPreviewStrip");
+  const voiceBtn = document.getElementById("voiceBtn");
   const inlineToolSelect = document.getElementById("inlineToolSelect");
   const thinkingToggle = document.getElementById("thinkingToggle");
   const cancelBtn = document.getElementById("cancelBtn");
@@ -351,6 +352,7 @@
     sendBtn.disabled = !hasSession;
     cancelBtn.style.display = isRunning && hasSession ? "flex" : "none";
     imgBtn.disabled = !hasSession;
+    voiceBtn.disabled = !hasSession;
     inlineToolSelect.disabled = !hasSession;
     thinkingToggle.disabled = !hasSession;
   }
@@ -820,6 +822,7 @@
     msgInput.disabled = false;
     sendBtn.disabled = false;
     imgBtn.disabled = false;
+    voiceBtn.disabled = false;
     inlineToolSelect.disabled = false;
     thinkingToggle.disabled = false;
 
@@ -1028,6 +1031,70 @@
       addImageFiles(imageFiles);
     }
   });
+
+  // ---- Voice Recording ----
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
+
+  voiceBtn.addEventListener("click", async () => {
+    if (!currentSessionId) return;
+
+    if (isRecording) {
+      // Stop recording
+      mediaRecorder.stop();
+      voiceBtn.classList.remove("recording");
+      voiceBtn.textContent = "🎙";
+      isRecording = false;
+    } else {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          stream.getTracks().forEach(t => t.stop());
+          await transcribeAudio(audioBlob);
+          audioChunks = [];
+        };
+
+        mediaRecorder.start();
+        voiceBtn.classList.add("recording");
+        voiceBtn.textContent = "⏹";
+        isRecording = true;
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+        alert("Please allow microphone access to use voice input");
+      }
+    }
+  });
+
+  async function transcribeAudio(blob) {
+    const formData = new FormData();
+    formData.append("audio", blob, "recording.webm");
+
+    try {
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (data.text) {
+        msgInput.value += (msgInput.value ? " " : "") + data.text;
+        autoResizeInput();
+        saveDraft();
+        msgInput.focus();
+      }
+    } catch (err) {
+      console.error("Transcription failed:", err);
+    }
+  }
 
   // ---- Send message ----
   function sendMessage() {

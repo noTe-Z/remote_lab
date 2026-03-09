@@ -153,11 +153,15 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
   delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
 
   // For official Claude tool, clear any Aliyun env vars that might be set globally
+  // and set proxy for accessing Anthropic API from China
   if (toolId === 'claude') {
     delete cleanEnv.ANTHROPIC_AUTH_TOKEN;
     delete cleanEnv.ANTHROPIC_BASE_URL;
     delete cleanEnv.ANTHROPIC_MODEL;
-    console.log(`${TAG} Using official Anthropic API endpoint`);
+    // Set proxy for official Anthropic API (required in China)
+    cleanEnv.HTTP_PROXY = 'http://127.0.0.1:7890';
+    cleanEnv.HTTPS_PROXY = 'http://127.0.0.1:7890';
+    console.log(`${TAG} Using official Anthropic API endpoint (with proxy)`);
   }
 
   // Aliyun endpoint configuration for claude-aliyun tool

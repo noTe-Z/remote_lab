@@ -45,7 +45,7 @@ const BASE_SECURITY_HEADERS = {
   'X-UA-Compatible': 'IE=edge',
   'X-Frame-Options': 'SAMEORIGIN',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
 };
 
 export function setSecurityHeaders(res, nonce) {

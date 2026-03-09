@@ -321,6 +321,44 @@ export async function handleRequest(req, res) {
     return;
   }
 
+  // POST /api/transcribe - transcribe audio file
+  if (pathname === '/api/transcribe' && req.method === 'POST') {
+    const contentType = req.headers['content-type'] || '';
+    const boundaryMatch = contentType.match(/boundary=(.+)/);
+
+    if (!boundaryMatch) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid content type' }));
+      return;
+    }
+
+    const boundary = boundaryMatch[1];
+    const chunks = [];
+
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', async () => {
+      const buffer = Buffer.concat(chunks);
+      const audioBuffer = extractMultipartFile(buffer, boundary);
+
+      if (!audioBuffer) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No audio file found' }));
+        return;
+      }
+
+      try {
+        const text = await transcribeWithAIBuilder(audioBuffer);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text }));
+      } catch (err) {
+        console.error('Transcription error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Transcription failed' }));
+      }
+    });
+    return;
+  }
+
   // ---- Assistant Files API ----
   // GET /api/files - list files in assistant directory
   if (pathname === '/api/files' && req.method === 'GET') {
@@ -662,4 +700,41 @@ You are the user's personal assistant, focused on helping with development tasks
 
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not Found');
+}
+
+// Extract file from multipart form data
+function extractMultipartFile(buffer, boundary) {
+  const boundaryBytes = Buffer.from('--' + boundary);
+  let start = buffer.indexOf(Buffer.from('\r\n\r\n'));
+  if (start === -1) return null;
+  start += 4;
+  const endBoundary = Buffer.from('\r\n--' + boundary);
+  const end = buffer.indexOf(endBoundary, start);
+  if (end === -1) return null;
+  return buffer.subarray(start, end);
+}
+
+// Call AI Builder transcription API
+async function transcribeWithAIBuilder(audioBuffer) {
+  const AI_BUILDER_TOKEN = process.env.AI_BUILDER_TOKEN;
+  const API_URL = 'https://space.ai-builders.com/backend/v1/audio/transcriptions';
+
+  const formData = new FormData();
+  const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+  formData.append('audio_file', blob, 'recording.webm');
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${AI_BUILDER_TOKEN}`
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.text;
 }

@@ -638,6 +638,17 @@ body {
 }
 .input-config-row .img-btn:active { background: var(--bg-tertiary); }
 .input-config-row .img-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.voice-btn {
+  width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); font-size: 14px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.voice-btn:active { background: var(--bg-tertiary); }
+.voice-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.voice-btn.recording {
+  background: var(--error); border-color: var(--error); color: white;
+  animation: pulse 1s infinite;
+}
 .input-row {
   display: flex; align-items: flex-end; gap: 8px;
   padding: 8px 10px 8px 14px;
@@ -776,6 +787,7 @@ body {
           <select class="tool-select" id="inlineToolSelect" disabled></select>
           <button class="thinking-toggle" id="thinkingToggle" disabled>Thinking</button>
           <button class="img-btn" id="imgBtn" disabled title="Attach image">&#128247;</button>
+          <button class="voice-btn" id="voiceBtn" disabled title="Voice input">&#127908;</button>
         </div>
         <div class="input-row">
           <input type="file" id="imgFileInput" accept="image/*" multiple hidden>
