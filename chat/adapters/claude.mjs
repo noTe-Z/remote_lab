@@ -145,6 +145,9 @@ export function buildClaudeArgs(prompt, options = {}) {
   if (options.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');
   }
+  if (options.planMode) {
+    args.push('--permission-mode', 'plan');
+  }
 
   // Note: We don't override the model here. Users configure their preferred model
   // via ~/.claude.json (ANTHROPIC_MODEL env var or "model" field).

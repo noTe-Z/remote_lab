@@ -130,6 +130,7 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
       dangerouslySkipPermissions: true,
       resume: options.claudeSessionId,
       thinking: options.thinking,
+      planMode: options.planMode,
     });
   } else if (isCodexFamily) {
     adapter = createCodexAdapter();
@@ -141,6 +142,7 @@ export function spawnTool(toolId, folder, prompt, onEvent, onExit, options = {})
     args = buildClaudeArgs(effectivePrompt, {
       dangerouslySkipPermissions: true,
       thinking: options.thinking,
+      planMode: options.planMode,
     });
   }
 

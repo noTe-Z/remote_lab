@@ -181,7 +181,7 @@ export function sendMessage(sessionId, text, images, options = {}) {
   if (!session) throw new Error('Session not found');
 
   // Parse skill syntax (/skill-name args)
-  const { skill, args, text: processedText } = parseSkill(text);
+  const { skill, args, text: processedText, planMode } = parseSkill(text);
   const isSkillMessage = !!skill;
 
   // Determine effective tool: per-message override or session default
@@ -195,6 +195,12 @@ export function sendMessage(sessionId, text, images, options = {}) {
     if (idx !== -1 && !metas[idx].pendingMemory) {
       metas[idx].pendingMemory = true;
       saveSessionsMeta(metas);
+      // Broadcast the session update so frontend shows the pending memory dot
+      const live = liveSessions.get(sessionId);
+      broadcast(sessionId, {
+        type: 'session',
+        session: { ...metas[idx], status: live?.status || 'idle' }
+      });
     }
   }
 
@@ -294,6 +300,9 @@ export function sendMessage(sessionId, text, images, options = {}) {
   }
   if (options.thinking) {
     spawnOptions.thinking = true;
+  }
+  if (planMode) {
+    spawnOptions.planMode = true;
   }
 
   // If a compact context exists, inject the old text history as preamble

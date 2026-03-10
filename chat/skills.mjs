@@ -4,12 +4,19 @@
  * Skills are predefined prompts/behaviors triggered by `/skill-name` syntax.
  * When a message starts with a skill name, the text is transformed to include
  * the skill's prompt.
+ *
+ * Special skills like /plan can also set CLI flags.
  */
 
 /**
  * Available skills with their trigger conditions and prompts.
  */
 export const SKILLS = {
+  plan: {
+    description: 'Start in Plan Mode - discuss and refine requirements before implementation.',
+    prompt: null, // No prompt injection, just enables --permission-mode plan
+    isPlanMode: true,
+  },
   simplify: {
     description: 'Review changed code for reuse, quality, and efficiency, then fix any issues found.',
     prompt: `Review the recent code changes for:
@@ -33,17 +40,18 @@ After reviewing, fix any issues found. Focus on practical improvements, not theo
  * Parse a message to detect skill syntax.
  *
  * @param {string} text - The user's message text
- * @returns {{ skill: string|null, args: string, text: string }}
+ * @returns {{ skill: string|null, args: string, text: string, planMode: boolean }}
  *   - skill: the skill name if detected, null otherwise
  *   - args: arguments passed after skill name
  *   - text: the transformed text with skill prompt injected
+ *   - planMode: true if /plan was detected
  */
 export function parseSkill(text) {
   // Match /skill-name or /skill-name followed by arguments
   const match = text.match(/^\/(\S+)(?:\s+(.*))?$/s);
 
   if (!match) {
-    return { skill: null, args: '', text };
+    return { skill: null, args: '', text, planMode: false };
   }
 
   const skillName = match[1];
@@ -52,7 +60,17 @@ export function parseSkill(text) {
   const skill = SKILLS[skillName];
   if (!skill) {
     // Unknown skill - treat as regular text
-    return { skill: null, args: '', text };
+    return { skill: null, args: '', text, planMode: false };
+  }
+
+  // Handle /plan specially - enables plan mode without prompt injection
+  if (skill.isPlanMode) {
+    return {
+      skill: skillName,
+      args,
+      text: args || 'Help me plan this task. Let\'s discuss the requirements and approach before implementing.',
+      planMode: true,
+    };
   }
 
   // Transform the text to include skill prompt
@@ -64,6 +82,7 @@ export function parseSkill(text) {
     skill: skillName,
     args,
     text: transformedText,
+    planMode: false,
   };
 }
 
