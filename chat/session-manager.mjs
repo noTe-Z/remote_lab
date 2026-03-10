@@ -8,6 +8,7 @@ import { loadHistory, appendEvent } from './history.mjs';
 import { messageEvent, statusEvent } from './normalizer.mjs';
 import { triggerSummary, removeSidebarEntry } from './summarizer.mjs';
 import { sendCompletionPush } from './push.mjs';
+import { parseSkill } from './skills.mjs';
 
 const ASSISTANT_DIR = join(homedir(), 'Development', 'assistant');
 
@@ -179,9 +180,13 @@ export function sendMessage(sessionId, text, images, options = {}) {
   const session = getSession(sessionId);
   if (!session) throw new Error('Session not found');
 
+  // Parse skill syntax (/skill-name args)
+  const { skill, args, text: processedText } = parseSkill(text);
+  const isSkillMessage = !!skill;
+
   // Determine effective tool: per-message override or session default
   const effectiveTool = options.tool || session.tool;
-  console.log(`[session-mgr] sendMessage session=${sessionId.slice(0,8)} tool=${effectiveTool} (session.tool=${session.tool}) thinking=${!!options.thinking} text="${text.slice(0,80)}" images=${images?.length || 0}`);
+  console.log(`[session-mgr] sendMessage session=${sessionId.slice(0,8)} tool=${effectiveTool} (session.tool=${session.tool}) thinking=${!!options.thinking} skill=${skill || 'none'} text="${text.slice(0,80)}" images=${images?.length || 0}`);
 
   // Mark pendingMemory for assistant directory sessions
   if (session.folder === ASSISTANT_DIR) {
@@ -198,8 +203,12 @@ export function sendMessage(sessionId, text, images, options = {}) {
   // For history/display: store filenames (not base64) so history files stay small
   const imageRefs = savedImages.map(img => ({ filename: img.filename, mimeType: img.mimeType }));
 
-  // Store user message in history
-  const userEvt = messageEvent('user', text, imageRefs.length > 0 ? imageRefs : undefined);
+  // Store user message in history (keep original text for display)
+  // Add skill marker if this was a skill command
+  const historyText = isSkillMessage
+    ? `**[/${skill}]** ${args}`
+    : text;
+  const userEvt = messageEvent('user', historyText, imageRefs.length > 0 ? imageRefs : undefined);
   appendEvent(sessionId, userEvt);
   broadcast(sessionId, { type: 'event', event: userEvt });
 
@@ -288,9 +297,9 @@ export function sendMessage(sessionId, text, images, options = {}) {
   }
 
   // If a compact context exists, inject the old text history as preamble
-  let actualText = text;
+  let actualText = processedText;
   if (live.compactContext) {
-    actualText = `[Previous conversation — tool results removed for context compression]\n\n${live.compactContext}\n\n---\n\nContinuing: ${text}`;
+    actualText = `[Previous conversation — tool results removed for context compression]\n\n${live.compactContext}\n\n---\n\nContinuing: ${processedText}`;
     live.compactContext = undefined;
   }
 

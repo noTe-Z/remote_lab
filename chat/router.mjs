@@ -13,6 +13,7 @@ import { listSessions, getSession, createSession, deleteSession, markMemoryStatu
 import { getSidebarState } from './summarizer.mjs';
 import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
+import { getAvailableSkills } from './skills.mjs';
 import {
   getClientIp, isRateLimited, recordFailedAttempt, clearFailedAttempts,
   setSecurityHeaders, generateNonce, requireAuth,
@@ -232,6 +233,13 @@ export async function handleRequest(req, res) {
     const tools = getAvailableTools();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ tools }));
+    return;
+  }
+
+  if (pathname === '/api/skills' && req.method === 'GET') {
+    const skills = getAvailableSkills();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ skills }));
     return;
   }
 
