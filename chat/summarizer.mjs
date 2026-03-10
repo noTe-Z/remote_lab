@@ -212,6 +212,8 @@ async function runSummary(sessionMeta, onRename) {
     return;
   }
 
+  console.log(`[summarizer] Parsed summary for ${sessionId.slice(0, 8)}: background="${summary.background?.slice(0, 50)}" lastAction="${summary.lastAction?.slice(0, 50)}" title="${summary.title || '(none)'}" isDefaultName=${isDefaultName}`);
+
   state.sessions[sessionId] = {
     name: name || '',
     folder,
@@ -229,6 +231,8 @@ async function runSummary(sessionMeta, onRename) {
       console.log(`[summarizer] Auto-renaming session ${sessionId.slice(0, 8)} to: ${newName}`);
       onRename(newName);
     }
+  } else if (isDefaultName && !summary.title) {
+    console.log(`[summarizer] No title in response for session ${sessionId.slice(0, 8)}, skipping auto-rename`);
   }
 }
 

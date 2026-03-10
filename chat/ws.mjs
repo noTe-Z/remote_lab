@@ -1,4 +1,6 @@
 import { WebSocketServer } from 'ws';
+import { homedir } from 'os';
+import { join, resolve } from 'path';
 import { isAuthenticated, parseCookies } from '../lib/auth.mjs';
 import {
   createSession, deleteSession, getSession, listSessions,
@@ -88,7 +90,11 @@ function handleMessage(ws, msg, ctx) {
         wsSend(ws, { type: 'error', message: 'folder and tool are required' });
         return;
       }
-      const session = createSession(msg.folder, msg.tool, msg.name || '');
+      // Resolve folder path (handle ~ and relative paths)
+      const resolvedFolder = msg.folder.startsWith('~')
+        ? join(homedir(), msg.folder.slice(1))
+        : resolve(msg.folder);
+      const session = createSession(resolvedFolder, msg.tool, msg.name || '');
       wsSend(ws, { type: 'session', session });
       break;
     }

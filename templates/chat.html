@@ -556,6 +556,7 @@ body {
   padding-bottom: calc(10px + var(--safe-bottom));
   background: var(--bg);
   border-top: 1px solid var(--border);
+  position: relative;
 }
 
 /* Resize handle */
@@ -692,10 +693,10 @@ body {
   flex: 1; position: relative; display: flex; flex-direction: column;
 }
 .skill-suggestions {
-  position: absolute; bottom: 100%; left: 0; right: 0;
+  position: absolute; bottom: calc(100% - 10px); left: 16px; right: 16px;
   background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  max-height: 200px; overflow-y: auto; z-index: 10;
+  border-radius: 8px; box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+  max-height: 280px; overflow-y: auto; z-index: 50;
   display: none;
 }
 .skill-suggestions.visible { display: block; }
@@ -773,6 +774,7 @@ body {
   .input-area { padding: 0 0 14px; padding-bottom: calc(14px + var(--safe-bottom)); }
   .input-wrapper { width: 70%; margin: 0 auto; }
   .input-resize-handle { margin: 0 0 10px; }
+  .skill-suggestions { left: 15%; right: 15%; }
 }
 </style>
 </head>
@@ -839,12 +841,13 @@ body {
           <input type="file" id="imgFileInput" accept="image/*" multiple hidden>
           <div class="input-row-inner">
             <textarea id="msgInput" placeholder="Message..." disabled></textarea>
-            <div class="skill-suggestions" id="skillSuggestions"></div>
           </div>
           <button class="send-btn" id="sendBtn" disabled title="Send">&#9654;</button>
           <button class="cancel-btn" id="cancelBtn" title="Stop" style="display:none">&#9632;</button>
         </div>
       </div>
+      <!-- Skill suggestions outside input-wrapper to avoid overflow:hidden clipping -->
+      <div class="skill-suggestions" id="skillSuggestions"></div>
     </div>
   </main>
 </div>
