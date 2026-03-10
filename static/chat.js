@@ -45,6 +45,7 @@
   const fileViewerTitle = document.getElementById("fileViewerTitle");
   const fileViewerContent = document.getElementById("fileViewerContent");
   const fileViewerClose = document.getElementById("fileViewerClose");
+  const skillSuggestions = document.getElementById("skillSuggestions");
 
   let ws = null;
   let pendingImages = [];
@@ -64,6 +65,7 @@
   let thinkingEnabled = localStorage.getItem("thinkingEnabled") !== "false";
   let sidebarCollapsed = localStorage.getItem("sidebarCollapsed") === "true";
   let toolsList = [];
+  let skillsList = [];
   let isDesktop = window.matchMedia("(min-width: 768px)").matches;
   let collapsedFolders = JSON.parse(
     localStorage.getItem("collapsedFolders") || "{}",
@@ -197,6 +199,84 @@
   inlineToolSelect.addEventListener("change", () => {
     selectedTool = inlineToolSelect.value;
     localStorage.setItem("selectedTool", selectedTool);
+  });
+
+  // ---- Skills autocomplete ----
+  async function loadSkills() {
+    try {
+      const res = await fetch("/api/skills");
+      const data = await res.json();
+      skillsList = data.skills || [];
+    } catch {}
+  }
+
+  function showSkillSuggestions(query) {
+    // query is the text after "/", e.g. "sim" for "/sim"
+    const filtered = skillsList.filter(s =>
+      s.name.toLowerCase().startsWith(query.toLowerCase())
+    );
+    if (filtered.length === 0) {
+      skillSuggestions.classList.remove("visible");
+      return;
+    }
+    skillSuggestions.innerHTML = filtered.map(s => `
+      <button class="skill-suggestion" data-skill="${s.name}">
+        <div class="skill-name">/${s.name}</div>
+        <div class="skill-desc">${s.description}</div>
+      </button>
+    `).join("");
+    skillSuggestions.classList.add("visible");
+  }
+
+  function hideSkillSuggestions() {
+    skillSuggestions.classList.remove("visible");
+  }
+
+  // Handle skill suggestion click
+  skillSuggestions.addEventListener("click", (e) => {
+    const btn = e.target.closest(".skill-suggestion");
+    if (!btn) return;
+    const skillName = btn.dataset.skill;
+    const text = msgInput.value;
+    // Replace the "/" and partial skill name with the full skill name
+    const slashIndex = text.lastIndexOf("/");
+    if (slashIndex !== -1) {
+      const before = text.slice(0, slashIndex);
+      const after = text.slice(slashIndex).split(/\s/).slice(1).join(" ");
+      msgInput.value = `${before}/${skillName} ${after}`;
+      msgInput.focus();
+      // Move cursor to end
+      msgInput.selectionStart = msgInput.selectionEnd = msgInput.value.length;
+    }
+    hideSkillSuggestions();
+  });
+
+  // Check for skill command on input
+  let skillQueryStart = -1;
+  msgInput.addEventListener("input", () => {
+    const text = msgInput.value;
+    const cursorPos = msgInput.selectionStart;
+    // Find if cursor is after a "/" that starts a skill command
+    const beforeCursor = text.slice(0, cursorPos);
+    const slashIndex = beforeCursor.lastIndexOf("/");
+    // Check if "/" is at start of line or preceded by whitespace
+    if (slashIndex !== -1 && (slashIndex === 0 || /\s/.test(text[slashIndex - 1]))) {
+      const afterSlash = beforeCursor.slice(slashIndex + 1);
+      // If no space after slash, it's a skill query
+      if (!afterSlash.includes(" ") && afterSlash.length < 20) {
+        skillQueryStart = slashIndex;
+        showSkillSuggestions(afterSlash);
+      } else {
+        hideSkillSuggestions();
+      }
+    } else {
+      hideSkillSuggestions();
+    }
+  });
+
+  // Hide suggestions on blur (with delay to allow click)
+  msgInput.addEventListener("blur", () => {
+    setTimeout(hideSkillSuggestions, 150);
   });
 
   // ---- WebSocket ----
@@ -1560,5 +1640,6 @@
   // ---- Init ----
   initResponsiveLayout();
   loadInlineTools();
+  loadSkills();
   connect();
 })();

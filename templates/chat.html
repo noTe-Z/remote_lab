@@ -663,6 +663,27 @@ body {
   overflow-y: auto;
 }
 .input-row textarea::placeholder { color: var(--text-muted); }
+.input-row-inner {
+  flex: 1; position: relative; display: flex; flex-direction: column;
+}
+.skill-suggestions {
+  position: absolute; bottom: 100%; left: 0; right: 0;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: 200px; overflow-y: auto; z-index: 10;
+  display: none;
+}
+.skill-suggestions.visible { display: block; }
+.skill-suggestion {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 12px; background: none; border: none;
+  color: var(--text); font-size: 14px; cursor: pointer;
+  font-family: inherit; border-bottom: 1px solid var(--border);
+}
+.skill-suggestion:last-child { border-bottom: none; }
+.skill-suggestion:hover { background: var(--bg-secondary); }
+.skill-suggestion .skill-name { font-weight: 600; color: var(--accent); }
+.skill-suggestion .skill-desc { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
 .send-btn {
   width: 34px; height: 34px; border-radius: 50%; border: none;
   background: var(--text); color: var(--bg); font-size: 16px; cursor: pointer;
@@ -791,7 +812,10 @@ body {
         </div>
         <div class="input-row">
           <input type="file" id="imgFileInput" accept="image/*" multiple hidden>
-          <textarea id="msgInput" placeholder="Message..." disabled></textarea>
+          <div class="input-row-inner">
+            <textarea id="msgInput" placeholder="Message..." disabled></textarea>
+            <div class="skill-suggestions" id="skillSuggestions"></div>
+          </div>
           <button class="send-btn" id="sendBtn" disabled title="Send">&#9654;</button>
           <button class="cancel-btn" id="cancelBtn" title="Stop" style="display:none">&#9632;</button>
         </div>
