@@ -1159,6 +1159,10 @@
     const formData = new FormData();
     formData.append("audio", blob, "recording.webm");
 
+    // Show processing state
+    voiceBtn.classList.add("processing");
+    voiceBtn.textContent = "";
+
     try {
       const res = await fetch("/api/transcribe", {
         method: "POST",
@@ -1170,9 +1174,29 @@
         autoResizeInput();
         saveDraft();
         msgInput.focus();
+
+        // Show success
+        voiceBtn.classList.remove("processing");
+        voiceBtn.classList.add("success");
+        voiceBtn.textContent = "✓";
+        setTimeout(() => {
+          voiceBtn.classList.remove("success");
+          voiceBtn.textContent = "🎙";
+        }, 800);
+      } else {
+        throw new Error("No text returned");
       }
     } catch (err) {
       console.error("Transcription failed:", err);
+
+      // Show error
+      voiceBtn.classList.remove("processing");
+      voiceBtn.classList.add("error");
+      voiceBtn.textContent = "✗";
+      setTimeout(() => {
+        voiceBtn.classList.remove("error");
+        voiceBtn.textContent = "🎙";
+      }, 1200);
     }
   }
 

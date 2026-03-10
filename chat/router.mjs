@@ -2,7 +2,7 @@ import { existsSync, statSync, readdirSync, readFileSync, mkdirSync, writeFileSy
 import { homedir } from 'os';
 import { join, resolve, dirname, basename, extname } from 'path';
 import { parse as parseUrl, fileURLToPath } from 'url';
-import { SESSION_EXPIRY, CHAT_IMAGES_DIR, CHAT_HISTORY_DIR } from '../lib/config.mjs';
+import { SESSION_EXPIRY, CHAT_IMAGES_DIR, CHAT_HISTORY_DIR, AI_BUILDER_TOKEN_FILE } from '../lib/config.mjs';
 import {
   sessions, saveAuthSessions,
   verifyToken, verifyPassword, generateToken,
@@ -724,7 +724,18 @@ function extractMultipartFile(buffer, boundary) {
 
 // Call AI Builder transcription API
 async function transcribeWithAIBuilder(audioBuffer) {
-  const AI_BUILDER_TOKEN = process.env.AI_BUILDER_TOKEN;
+  // Read token from config file, fallback to env var
+  let AI_BUILDER_TOKEN = process.env.AI_BUILDER_TOKEN;
+  if (!AI_BUILDER_TOKEN && existsSync(AI_BUILDER_TOKEN_FILE)) {
+    try {
+      const data = JSON.parse(readFileSync(AI_BUILDER_TOKEN_FILE, 'utf-8'));
+      AI_BUILDER_TOKEN = data.token;
+    } catch {}
+  }
+  if (!AI_BUILDER_TOKEN) {
+    throw new Error('AI Builder token not configured');
+  }
+
   const API_URL = 'https://space.ai-builders.com/backend/v1/audio/transcriptions';
 
   const formData = new FormData();
