@@ -1116,9 +1116,18 @@
   let mediaRecorder = null;
   let audioChunks = [];
   let isRecording = false;
+  let pendingRetryBlob = null;  // Cached audio for retry on failure
 
   voiceBtn.addEventListener("click", async () => {
     if (!currentSessionId) return;
+
+    // If in retry state, retry transcription
+    if (pendingRetryBlob) {
+      const blob = pendingRetryBlob;
+      pendingRetryBlob = null;
+      await transcribeAudio(blob);
+      return;
+    }
 
     if (isRecording) {
       // Stop recording
@@ -1127,7 +1136,14 @@
       voiceBtn.textContent = "🎙";
       isRecording = false;
     } else {
-      // Start recording
+      // Start recording - clear any pending retry first
+      if (voiceBtn.classList.contains("retry")) {
+        voiceBtn.classList.remove("retry");
+        voiceBtn.textContent = "🎙";
+        voiceBtn.title = "Voice input";
+        pendingRetryBlob = null;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -1170,6 +1186,9 @@
       });
       const data = await res.json();
       if (data.text) {
+        // Clear any cached retry blob on success
+        pendingRetryBlob = null;
+
         msgInput.value += (msgInput.value ? " " : "") + data.text;
         autoResizeInput();
         saveDraft();
@@ -1179,6 +1198,7 @@
         voiceBtn.classList.remove("processing");
         voiceBtn.classList.add("success");
         voiceBtn.textContent = "✓";
+        voiceBtn.title = "Voice input";
         setTimeout(() => {
           voiceBtn.classList.remove("success");
           voiceBtn.textContent = "🎙";
@@ -1189,14 +1209,14 @@
     } catch (err) {
       console.error("Transcription failed:", err);
 
-      // Show error
+      // Cache blob for retry
+      pendingRetryBlob = blob;
+
+      // Show retry state
       voiceBtn.classList.remove("processing");
-      voiceBtn.classList.add("error");
-      voiceBtn.textContent = "✗";
-      setTimeout(() => {
-        voiceBtn.classList.remove("error");
-        voiceBtn.textContent = "🎙";
-      }, 1200);
+      voiceBtn.classList.add("retry");
+      voiceBtn.textContent = "↻";
+      voiceBtn.title = "Tap to retry";
     }
   }
 
