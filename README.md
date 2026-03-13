@@ -92,6 +92,48 @@ Phone ──HTTPS──→ Cloudflare Tunnel ──→ chat-server :7690
 
 Each chat session is a subprocess. When you disconnect, the process keeps running. When you reconnect, the server replays history and reattaches to the live stream.
 
+#### Context persistence across restarts
+
+RemoteLab maintains conversation context across server restarts using `claudeSessionId`:
+
+```
+First message: Claude Code outputs session_id: "abc123"
+                    ↓
+We capture & save: claudeSessionId → chat-sessions.json
+                    ↓
+Server restarts: Load from chat-sessions.json
+                    ↓
+Next message: --resume abc123 → Claude Code restores context from its internal storage
+```
+
+**Important:** Two separate storage systems exist:
+
+| System | Location | Purpose |
+|--------|----------|---------|
+| RemoteLab chat-history | `~/.config/claude-web/chat-history/*.json` | Frontend display, history replay |
+| Claude Code internal | `~/.claude/` (internal) | Claude's conversation context |
+
+The chat-history files are **not** sent to Claude Code — they're only for the UI. Context continuity relies on `--resume` with the session ID, which tells Claude Code to load its own stored conversation history.
+
+#### Tool switching clears context
+
+Switching between tools (e.g., `claude` → `claude-aliyun`) clears the session ID because:
+
+1. Different tools have independent session systems
+2. A session ID from one backend won't work with another
+3. This prevents confusion from "remembered" context that the new tool doesn't actually have
+
+#### Compact function
+
+The "Compact" button strips tool results from history while keeping text messages:
+
+- **Does NOT modify** history files — original records are preserved
+- Extracts `message` type events into a transcript stored in memory
+- On next message, injects this transcript as a preamble
+- After injection, the in-memory `compactContext` is cleared
+
+Use Compact when context is getting long but you want Claude to remember the conversation.
+
 ---
 
 ## CLI Reference
