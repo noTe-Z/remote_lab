@@ -231,6 +231,14 @@ export function sendMessage(sessionId, text, images, options = {}) {
     console.log(`[session-mgr] Tool switched from ${session.tool} to ${effectiveTool}, clearing resume IDs`);
     live.claudeSessionId = undefined;
     live.codexThreadId = undefined;
+    // Also clear from persisted metadata
+    const metas = loadSessionsMeta();
+    const idx = metas.findIndex(m => m.id === sessionId);
+    if (idx !== -1) {
+      delete metas[idx].claudeSessionId;
+      delete metas[idx].codexThreadId;
+      saveSessionsMeta(metas);
+    }
   }
 
   // If a process is still running, cancel it (all modes are oneshot now)
@@ -269,6 +277,17 @@ export function sendMessage(sessionId, text, images, options = {}) {
         l.codexThreadId = l.runner.codexThreadId;
         console.log(`[session-mgr] Saved codexThreadId=${l.codexThreadId} for session ${sessionId.slice(0,8)}`);
       }
+      // Persist IDs to chat-sessions.json so they survive server restarts
+      if (l.claudeSessionId || l.codexThreadId) {
+        const metas = loadSessionsMeta();
+        const idx = metas.findIndex(m => m.id === sessionId);
+        if (idx !== -1) {
+          if (l.claudeSessionId) metas[idx].claudeSessionId = l.claudeSessionId;
+          if (l.codexThreadId) metas[idx].codexThreadId = l.codexThreadId;
+          saveSessionsMeta(metas);
+          console.log(`[session-mgr] Persisted resume IDs to chat-sessions.json`);
+        }
+      }
       l.status = 'idle';
       l.runner = null;
     }
@@ -284,6 +303,17 @@ export function sendMessage(sessionId, text, images, options = {}) {
     // Send web push notification (non-blocking)
     sendCompletionPush({ ...session, id: sessionId }).catch(() => {});
   };
+
+  // Restore resume IDs from persisted metadata if not in memory
+  const meta = loadSessionsMeta().find(m => m.id === sessionId);
+  if (meta?.claudeSessionId && !live.claudeSessionId) {
+    live.claudeSessionId = meta.claudeSessionId;
+    console.log(`[session-mgr] Restored claudeSessionId=${live.claudeSessionId} from metadata`);
+  }
+  if (meta?.codexThreadId && !live.codexThreadId) {
+    live.codexThreadId = meta.codexThreadId;
+    console.log(`[session-mgr] Restored codexThreadId=${live.codexThreadId} from metadata`);
+  }
 
   const spawnOptions = {};
   if (live.claudeSessionId) {
@@ -370,6 +400,14 @@ export function compactSession(sessionId) {
   // Clear Claude/Codex resume IDs so the next call starts a fresh session
   live.claudeSessionId = undefined;
   live.codexThreadId = undefined;
+  // Also clear from persisted metadata
+  const metas = loadSessionsMeta();
+  const idx = metas.findIndex(m => m.id === sessionId);
+  if (idx !== -1) {
+    delete metas[idx].claudeSessionId;
+    delete metas[idx].codexThreadId;
+    saveSessionsMeta(metas);
+  }
 
   // Store transcript for injection on next sendMessage
   if (transcript.trim()) {
