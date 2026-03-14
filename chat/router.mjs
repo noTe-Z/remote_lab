@@ -14,6 +14,7 @@ import { getSidebarState } from './summarizer.mjs';
 import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
 import { getAvailableSkills } from './skills.mjs';
+import { getTodayInbox, addInboxItem, deleteInboxItem, getInboxItem } from './inbox.mjs';
 import {
   getClientIp, isRateLimited, recordFailedAttempt, clearFailedAttempts,
   setSecurityHeaders, generateNonce, requireAuth,
@@ -662,6 +663,60 @@ You are the user's personal assistant, focused on helping with development tasks
       console.error('Error saving to memory:', err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to save' }));
+    }
+    return;
+  }
+
+  // ---- Inbox API ----
+  // GET /api/inbox - get today's inbox items
+  if (pathname === '/api/inbox' && req.method === 'GET') {
+    try {
+      const items = getTodayInbox();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ items }));
+    } catch (err) {
+      console.error('Error reading inbox:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read inbox' }));
+    }
+    return;
+  }
+
+  // POST /api/inbox - add a new inbox item
+  if (pathname === '/api/inbox' && req.method === 'POST') {
+    let body;
+    try { body = await readBody(req, 4096); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
+    try {
+      const { content, title } = JSON.parse(body);
+      if (!content || typeof content !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'content is required' }));
+        return;
+      }
+      const item = addInboxItem(content, title);
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ item }));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid request body' }));
+    }
+    return;
+  }
+
+  // DELETE /api/inbox/:id - delete an inbox item
+  if (pathname.startsWith('/api/inbox/') && req.method === 'DELETE') {
+    const id = pathname.split('/').pop();
+    const ok = deleteInboxItem(id);
+    if (ok) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Item not found' }));
     }
     return;
   }

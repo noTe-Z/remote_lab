@@ -47,6 +47,17 @@
   const fileViewerClose = document.getElementById("fileViewerClose");
   const skillSuggestions = document.getElementById("skillSuggestions");
 
+  // Inbox elements
+  const inboxContainer = document.getElementById("inboxContainer");
+  const inboxList = document.getElementById("inboxList");
+  const inboxCount = document.getElementById("inboxCount");
+  const inboxActionModal = document.getElementById("inboxActionModal");
+  const inboxActionContent = document.getElementById("inboxActionContent");
+  const inboxFolderSelect = document.getElementById("inboxFolderSelect");
+  const inboxToolSelect = document.getElementById("inboxToolSelect");
+  const inboxActionCancel = document.getElementById("inboxActionCancel");
+  const inboxActionCreate = document.getElementById("inboxActionCreate");
+
   let ws = null;
   let pendingImages = [];
   let currentSessionId = null;
@@ -70,6 +81,10 @@
   let collapsedFolders = JSON.parse(
     localStorage.getItem("collapsedFolders") || "{}",
   );
+
+  // Inbox state
+  let inboxItems = [];
+  let selectedInboxItem = null;
 
   // Assistant directory for memory status indicator
   const ASSISTANT_DIR = "/Users/chenyuan/Development/assistant";
@@ -896,6 +911,10 @@
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
 
+    // Hide inbox, show normal chat
+    emptyState.style.display = "none";
+    msgInput.placeholder = "Message...";
+
     const displayName =
       session?.name || session?.folder?.split("/").pop() || "Session";
     headerTitle.textContent = displayName;
@@ -916,6 +935,28 @@
     msgInput.focus();
     renderSessionList();
   }
+
+  // Click header to go back to inbox
+  headerTitle.addEventListener("click", () => {
+    if (currentSessionId) {
+      // Detach from current session
+      currentSessionId = null;
+      clearMessages();
+      emptyState.style.display = "";
+      msgInput.placeholder = "Add to inbox...";
+      headerTitle.textContent = "RemoteLab Chat";
+      imgBtn.disabled = true;
+      voiceBtn.disabled = true;
+      inlineToolSelect.disabled = true;
+      thinkingToggle.disabled = true;
+      compactBtn.style.display = "none";
+      saveMemoryBtn.style.display = "none";
+      contextTokens.style.display = "none";
+      renderSessionList();
+      loadInbox();
+    }
+  });
+  headerTitle.style.cursor = "pointer";
 
   // Dismiss pending memory indicator (user chose to ignore)
   async function dismissPendingMemory(sessionId) {
@@ -1223,7 +1264,14 @@
   // ---- Send message ----
   function sendMessage() {
     const text = msgInput.value.trim();
-    if ((!text && pendingImages.length === 0) || !currentSessionId) return;
+    if (!text && pendingImages.length === 0) return;
+
+    // If no session attached, send to inbox instead
+    if (!currentSessionId) {
+      sendToInbox(text);
+      return;
+    }
+
     const msg = { action: "send", text: text || "(image)" };
     if (selectedTool) msg.tool = selectedTool;
     msg.thinking = thinkingEnabled;
@@ -1681,9 +1729,194 @@
     }
   }
 
+  // ---- Inbox functions ----
+  async function loadInbox() {
+    try {
+      const res = await fetch("/api/inbox");
+      const data = await res.json();
+      inboxItems = data.items || [];
+      renderInbox();
+    } catch (err) {
+      console.error("Failed to load inbox:", err);
+    }
+  }
+
+  function renderInbox() {
+    inboxList.innerHTML = "";
+
+    if (inboxItems.length === 0) {
+      inboxList.innerHTML = '<div class="inbox-empty">No items yet. Type below to add something.</div>';
+      inboxCount.textContent = "0 items";
+      return;
+    }
+
+    inboxCount.textContent = `${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}`;
+
+    for (const item of inboxItems) {
+      const div = document.createElement("div");
+      div.className = "inbox-item";
+      div.dataset.id = item.id;
+
+      const timeStr = new Date(item.created).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      // Preview: first 60 chars of content
+      const preview = item.content.slice(0, 60) + (item.content.length > 60 ? "..." : "");
+
+      div.innerHTML = `
+        <div class="inbox-item-content">
+          <div class="inbox-item-title">${escapeHtml(item.title)}</div>
+          <div class="inbox-item-preview">${escapeHtml(preview)}</div>
+        </div>
+        <span class="inbox-item-time">${timeStr}</span>
+        <button class="inbox-item-delete" title="Delete">&times;</button>
+      `;
+
+      // Click to start session
+      div.addEventListener("click", (e) => {
+        if (e.target.classList.contains("inbox-item-delete")) return;
+        openInboxActionModal(item);
+      });
+
+      // Delete button
+      div.querySelector(".inbox-item-delete").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (confirm("Delete this item?")) {
+          try {
+            await fetch(`/api/inbox/${item.id}`, { method: "DELETE" });
+            inboxItems = inboxItems.filter(i => i.id !== item.id);
+            renderInbox();
+          } catch (err) {
+            console.error("Failed to delete inbox item:", err);
+          }
+        }
+      });
+
+      inboxList.appendChild(div);
+    }
+  }
+
+  async function sendToInbox(text) {
+    if (!text) return;
+    try {
+      const res = await fetch("/api/inbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      const data = await res.json();
+      if (data.item) {
+        inboxItems.unshift(data.item);
+        renderInbox();
+        msgInput.value = "";
+        autoResizeInput();
+      }
+    } catch (err) {
+      console.error("Failed to add to inbox:", err);
+      alert("Failed to add to inbox");
+    }
+  }
+
+  async function openInboxActionModal(item) {
+    selectedInboxItem = item;
+    inboxActionContent.textContent = item.title;
+
+    // Load folders from sessions
+    const folders = [...new Set(sessions.map(s => s.folder).filter(Boolean))];
+    inboxFolderSelect.innerHTML = "";
+    for (const folder of folders) {
+      const opt = document.createElement("option");
+      opt.value = folder;
+      opt.textContent = folder.split("/").pop();
+      inboxFolderSelect.appendChild(opt);
+    }
+
+    // Load tools
+    inboxToolSelect.innerHTML = "";
+    for (const t of toolsList) {
+      const opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = t.name;
+      inboxToolSelect.appendChild(opt);
+    }
+
+    inboxActionModal.classList.add("open");
+  }
+
+  inboxActionCancel.addEventListener("click", () => {
+    inboxActionModal.classList.remove("open");
+    selectedInboxItem = null;
+  });
+
+  inboxActionModal.addEventListener("click", (e) => {
+    if (e.target === inboxActionModal) {
+      inboxActionModal.classList.remove("open");
+      selectedInboxItem = null;
+    }
+  });
+
+  inboxActionCreate.addEventListener("click", async () => {
+    if (!selectedInboxItem) return;
+    const folder = inboxFolderSelect.value;
+    const tool = inboxToolSelect.value || "claude";
+    if (!folder) {
+      alert("Please select a folder");
+      return;
+    }
+
+    // Create session via WebSocket
+    wsSend({ action: "create", folder, tool });
+    inboxActionModal.classList.remove("open");
+
+    // Wait for session to be created
+    const handler = (e) => {
+      let msg;
+      try {
+        msg = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      if (msg.type === "session" && msg.session) {
+        ws.removeEventListener("message", handler);
+
+        // Attach to session and send the inbox item content
+        attachSession(msg.session.id, msg.session);
+        wsSend({ action: "list" });
+
+        // Send the inbox item content as a message
+        setTimeout(() => {
+          const sendMsg = { action: "send", text: selectedInboxItem.content };
+          if (selectedTool) sendMsg.tool = selectedTool;
+          sendMsg.thinking = thinkingEnabled;
+          wsSend(sendMsg);
+
+          // Delete the inbox item after sending
+          fetch(`/api/inbox/${selectedInboxItem.id}`, { method: "DELETE" });
+          inboxItems = inboxItems.filter(i => i.id !== selectedInboxItem.id);
+          renderInbox();
+          selectedInboxItem = null;
+        }, 500);
+      }
+    };
+    ws.addEventListener("message", handler);
+  });
+
   // ---- Init ----
   initResponsiveLayout();
   loadInlineTools();
   loadSkills();
   connect();
+
+  // Enable input in empty state for inbox
+  msgInput.disabled = false;
+  sendBtn.disabled = false;
+  msgInput.placeholder = "Add to inbox...";
+  imgBtn.disabled = true;
+  voiceBtn.disabled = true;
+  inlineToolSelect.disabled = true;
+  thinkingToggle.disabled = true;
+  loadInbox();
 })();

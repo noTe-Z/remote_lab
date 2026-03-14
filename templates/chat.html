@@ -374,6 +374,54 @@ body {
 .empty-state h2 { font-size: 22px; margin-bottom: 10px; color: var(--text); font-weight: 600; }
 .empty-state p { font-size: 14px; line-height: 1.6; max-width: 320px; }
 
+/* Inbox styles */
+.inbox-container {
+  width: 100%; max-width: 480px; margin: 0 auto;
+}
+.inbox-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; width: 100%;
+}
+.inbox-header h2 { margin: 0; font-size: 18px; color: var(--text); }
+.inbox-count {
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-tertiary); padding: 2px 8px; border-radius: 10px;
+}
+.inbox-list {
+  display: flex; flex-direction: column; gap: 8px; width: 100%;
+}
+.inbox-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; background: var(--bg-secondary);
+  border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; transition: all 0.15s;
+  text-align: left; width: 100%;
+}
+.inbox-item:hover { background: var(--bg-tertiary); border-color: var(--border-strong); }
+.inbox-item-content { flex: 1; min-width: 0; }
+.inbox-item-title {
+  font-size: 14px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.inbox-item-preview {
+  font-size: 12px; color: var(--text-muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.inbox-item-time {
+  font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+}
+.inbox-item-delete {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 16px; cursor: pointer; padding: 2px; border-radius: 4px;
+  opacity: 0; transition: opacity 0.1s, color 0.1s;
+}
+.inbox-item:hover .inbox-item-delete { opacity: 1; }
+.inbox-item-delete:hover { color: var(--error); background: var(--error-bg); }
+.inbox-empty {
+  text-align: center; color: var(--text-muted); font-size: 13px;
+  padding: 24px 16px;
+}
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* User message — bubble right-aligned */
@@ -821,8 +869,15 @@ body {
     <div class="messages" id="messages">
       <div class="messages-inner" id="messagesInner">
         <div class="empty-state" id="emptyState">
-          <h2>RemoteLab Chat</h2>
-          <p>Select or create a session from the sidebar, then start chatting with your AI coding tool.</p>
+          <div class="inbox-container" id="inboxContainer">
+            <div class="inbox-header">
+              <h2>Inbox</h2>
+              <span class="inbox-count" id="inboxCount">0 items</span>
+            </div>
+            <div class="inbox-list" id="inboxList">
+              <div class="inbox-empty">No items yet. Type below to add something.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -883,7 +938,23 @@ body {
   </div>
 </div>
 
+<!-- Inbox Action Modal -->
+<div class="modal-overlay" id="inboxActionModal">
+  <div class="modal">
+    <h3>Start Session from Inbox</h3>
+    <p id="inboxActionContent" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></p>
+    <label>Folder</label>
+    <select id="inboxFolderSelect"></select>
+    <label>Tool</label>
+    <select id="inboxToolSelect"></select>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="inboxActionCancel">Cancel</button>
+      <button class="btn-create" id="inboxActionCreate">Create Session</button>
+    </div>
+  </div>
+</div>
+
 <script src="/marked.min.js" nonce="{{NONCE}}"></script>
-<script src="/chat.js?v=2" nonce="{{NONCE}}"></script>
+<script src="/chat.js?v=3" nonce="{{NONCE}}"></script>
 </body>
 </html>
