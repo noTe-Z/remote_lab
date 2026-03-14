@@ -442,14 +442,21 @@
       statusText.textContent = currentSessionId ? "idle" : "connected";
     }
     const hasSession = !!currentSessionId;
-    msgInput.disabled = !hasSession;
+    // Keep msgInput and sendBtn enabled even without session (for inbox)
+    msgInput.disabled = false;
     sendBtn.style.display = isRunning ? "none" : "";
-    sendBtn.disabled = !hasSession;
+    sendBtn.disabled = false;
     cancelBtn.style.display = isRunning && hasSession ? "flex" : "none";
-    imgBtn.disabled = !hasSession;
-    voiceBtn.disabled = !hasSession;
+    imgBtn.disabled = false;  // Allow image upload for inbox
+    voiceBtn.disabled = false;  // Allow voice input for inbox
     inlineToolSelect.disabled = !hasSession;
     thinkingToggle.disabled = !hasSession;
+    // Update placeholder based on session state
+    if (!hasSession) {
+      msgInput.placeholder = "Add to inbox...";
+    } else {
+      msgInput.placeholder = "Message...";
+    }
   }
 
   // ---- Message rendering ----
@@ -945,8 +952,8 @@
       emptyState.style.display = "";
       msgInput.placeholder = "Add to inbox...";
       headerTitle.textContent = "RemoteLab Chat";
-      imgBtn.disabled = true;
-      voiceBtn.disabled = true;
+      imgBtn.disabled = false;  // Allow image upload for inbox
+      voiceBtn.disabled = false;  // Allow voice input for inbox
       inlineToolSelect.disabled = true;
       thinkingToggle.disabled = true;
       compactBtn.style.display = "none";
@@ -1160,7 +1167,7 @@
   let pendingRetryBlob = null;  // Cached audio for retry on failure
 
   voiceBtn.addEventListener("click", async () => {
-    if (!currentSessionId) return;
+    // Allow voice input in inbox mode (no session) - transcription just fills the input
 
     // If in retry state, retry transcription
     if (pendingRetryBlob) {
@@ -1236,7 +1243,7 @@
         msgInput.focus();
 
         // Show success
-        voiceBtn.classList.remove("processing");
+        voiceBtn.classList.remove("processing", "retry");
         voiceBtn.classList.add("success");
         voiceBtn.textContent = "✓";
         voiceBtn.title = "Voice input";
@@ -1914,8 +1921,8 @@
   msgInput.disabled = false;
   sendBtn.disabled = false;
   msgInput.placeholder = "Add to inbox...";
-  imgBtn.disabled = true;
-  voiceBtn.disabled = true;
+  imgBtn.disabled = false;  // Allow image upload for inbox
+  voiceBtn.disabled = false;  // Allow voice input for inbox
   inlineToolSelect.disabled = true;
   thinkingToggle.disabled = true;
   loadInbox();

@@ -180,13 +180,35 @@ export function sendMessage(sessionId, text, images, options = {}) {
   const session = getSession(sessionId);
   if (!session) throw new Error('Session not found');
 
+  // Initialize live session state early (needed for plan mode handling)
+  let live = liveSessions.get(sessionId);
+  if (!live) {
+    live = { status: 'idle', runner: null, listeners: new Set() };
+    liveSessions.set(sessionId, live);
+  }
+
   // Parse skill syntax (/skill-name args)
   const { skill, args, text: processedText, planMode } = parseSkill(text);
   const isSkillMessage = !!skill;
 
   // Determine effective tool: per-message override or session default
   const effectiveTool = options.tool || session.tool;
-  console.log(`[session-mgr] sendMessage session=${sessionId.slice(0,8)} tool=${effectiveTool} (session.tool=${session.tool}) thinking=${!!options.thinking} skill=${skill || 'none'} text="${text.slice(0,80)}" images=${images?.length || 0}`);
+
+  // Handle plan mode persistence:
+  // - /plan <requirements>: start persistent plan mode AND send the message
+  // - Otherwise: use session's persistent plan mode setting
+  let effectivePlanMode = false;
+  if (planMode) {
+    // /plan <requirements>: start persistent plan mode AND send the message
+    live.planMode = true;
+    effectivePlanMode = true;
+    console.log(`[session-mgr] Starting persistent plan mode for session ${sessionId.slice(0,8)}`);
+  } else if (live.planMode) {
+    // Use session's persistent plan mode
+    effectivePlanMode = true;
+    console.log(`[session-mgr] Using persistent plan mode for session ${sessionId.slice(0,8)}`);
+  }
+  console.log(`[session-mgr] sendMessage session=${sessionId.slice(0,8)} tool=${effectiveTool} (session.tool=${session.tool}) thinking=${!!options.thinking} skill=${skill || 'none'} planMode=${effectivePlanMode} text="${text.slice(0,80)}" images=${images?.length || 0}`);
 
   // Mark pendingMemory for assistant directory sessions
   if (session.folder === ASSISTANT_DIR) {
@@ -217,12 +239,6 @@ export function sendMessage(sessionId, text, images, options = {}) {
   const userEvt = messageEvent('user', historyText, imageRefs.length > 0 ? imageRefs : undefined);
   appendEvent(sessionId, userEvt);
   broadcast(sessionId, { type: 'event', event: userEvt });
-
-  let live = liveSessions.get(sessionId);
-  if (!live) {
-    live = { status: 'idle', runner: null, listeners: new Set() };
-    liveSessions.set(sessionId, live);
-  }
 
   console.log(`[session-mgr] live state: status=${live.status}, hasRunner=${!!live.runner}, claudeSessionId=${live.claudeSessionId || 'none'}, codexThreadId=${live.codexThreadId || 'none'}, listeners=${live.listeners.size}`);
 
@@ -331,7 +347,7 @@ export function sendMessage(sessionId, text, images, options = {}) {
   if (options.thinking) {
     spawnOptions.thinking = true;
   }
-  if (planMode) {
+  if (effectivePlanMode) {
     spawnOptions.planMode = true;
   }
 
