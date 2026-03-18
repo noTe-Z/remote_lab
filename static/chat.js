@@ -87,7 +87,12 @@
   let selectedInboxItem = null;
 
   // Assistant directory for memory status indicator
-  const ASSISTANT_DIR = "/Users/chenyuan/Development/assistant";
+  // Fetched from server config (set via ASSISTANT_DIR env var)
+  let ASSISTANT_DIR = null;
+  fetch('/api/config')
+    .then(r => r.json())
+    .then(cfg => { if (cfg.assistantDir) ASSISTANT_DIR = cfg.assistantDir; })
+    .catch(() => {});
 
   // Thinking block state
   let currentThinkingBlock = null; // { el, body, tools: Set }

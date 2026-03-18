@@ -4,6 +4,9 @@ credentials.txt
 .env.*
 !.env.example
 
+# Claude Code local settings (contains personal paths)
+.claude/
+
 # macOS
 .DS_Store
 ._*

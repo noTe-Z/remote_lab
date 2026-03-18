@@ -78,7 +78,7 @@ which claude || which codex || which cline || echo "MISSING: install at least on
 
 ```bash
 # If not already cloned:
-git clone https://github.com/Ninglo/remotelab.git ~/code/remotelab
+git clone https://github.com/YOUR_USERNAME/remotelab.git ~/code/remotelab
 cd ~/code/remotelab
 npm install
 npm link   # makes `remotelab` available globally
@@ -194,7 +194,38 @@ cloudflared tunnel validate
 
 ---
 
-## Phase 5: Create service definitions
+## Phase 5: [HUMAN] Configure Transcription API
+
+> **Stop here. The user needs to provide their API key.**
+
+Tell the user:
+
+> "RemoteLab supports voice input through a transcription service. You need to configure an API key."
+>
+> "The default provider is **AssemblyAI** (recommended). You can get a free API key at https://www.assemblyai.com/"
+>
+> "Please provide your AssemblyAI API key, or type 'skip' to skip this step (voice input will be disabled)."
+
+After the user provides the key, run:
+
+```bash
+mkdir -p ~/.config/claude-web
+
+cat > ~/.config/claude-web/transcription.json << EOF
+{
+  "provider": "assemblyai",
+  "apiKey": "USER_PROVIDED_API_KEY"
+}
+EOF
+
+echo "Transcription API configured successfully."
+```
+
+**Note:** The user can also configure this later by editing `~/.config/claude-web/transcription.json`.
+
+---
+
+## Phase 6: Create service definitions
 
 > **AI can execute this automatically.** All paths must be absolute.
 
@@ -314,7 +345,7 @@ loginctl enable-linger $USER
 
 ---
 
-## Phase 6: Start & verify
+## Phase 7: Start & verify
 
 > **AI can execute this automatically.**
 
@@ -352,7 +383,7 @@ tail -5 ~/.local/share/remotelab/logs/chat-server.log
 
 ---
 
-## Phase 7: [HUMAN] First login
+## Phase 8: [HUMAN] First login
 
 > **Stop here. Tell the user their access URL.**
 
@@ -370,7 +401,7 @@ Instead of the manual phases above, you can run:
 remotelab setup
 ```
 
-This interactive script handles phases 1–6 automatically, prompting for domain info and pausing for the Cloudflare browser login. It works on both **macOS** and **Linux**.
+This interactive script handles phases 1–7 automatically, prompting for domain info and pausing for the Cloudflare browser login. It works on both **macOS** and **Linux**.
 
 ---
 
@@ -426,6 +457,15 @@ loginctl enable-linger $USER
 ```bash
 dig @1.1.1.1 SUBDOMAIN.DOMAIN +short
 ```
+
+### Transcription not working
+
+Check the transcription config:
+```bash
+cat ~/.config/claude-web/transcription.json
+```
+
+Make sure the API key is valid. You can get a new key at https://www.assemblyai.com/
 
 ### Wipe and start over
 

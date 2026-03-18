@@ -2,7 +2,7 @@ import { existsSync, statSync, readdirSync, readFileSync, mkdirSync, writeFileSy
 import { homedir } from 'os';
 import { join, resolve, dirname, basename, extname } from 'path';
 import { parse as parseUrl, fileURLToPath } from 'url';
-import { SESSION_EXPIRY, CHAT_IMAGES_DIR, CHAT_HISTORY_DIR, AI_BUILDER_TOKEN_FILE } from '../lib/config.mjs';
+import { SESSION_EXPIRY, CHAT_IMAGES_DIR, CHAT_HISTORY_DIR } from '../lib/config.mjs';
 import {
   sessions, saveAuthSessions,
   verifyToken, verifyPassword, generateToken,
@@ -15,6 +15,7 @@ import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
 import { getAvailableSkills } from './skills.mjs';
 import { getTodayInbox, addInboxItem, deleteInboxItem, getInboxItem } from './inbox.mjs';
+import { transcribe } from '../lib/transcription.mjs';
 import {
   getClientIp, isRateLimited, recordFailedAttempt, clearFailedAttempts,
   setSecurityHeaders, generateNonce, requireAuth,
@@ -250,6 +251,15 @@ export async function handleRequest(req, res) {
     return;
   }
 
+  // GET /api/config - return client-side config
+  if (pathname === '/api/config' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      assistantDir: process.env.ASSISTANT_DIR || null
+    }));
+    return;
+  }
+
   if (pathname === '/api/autocomplete' && req.method === 'GET') {
     const query = parsedUrl.query.q || '';
     const suggestions = [];
@@ -356,7 +366,7 @@ export async function handleRequest(req, res) {
       }
 
       try {
-        const text = await transcribeWithAIBuilder(audioBuffer);
+        const text = await transcribe(audioBuffer);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ text }));
       } catch (err) {
@@ -775,40 +785,4 @@ function extractMultipartFile(buffer, boundary) {
   const end = buffer.indexOf(endBoundary, start);
   if (end === -1) return null;
   return buffer.subarray(start, end);
-}
-
-// Call AI Builder transcription API
-async function transcribeWithAIBuilder(audioBuffer) {
-  // Read token from config file, fallback to env var
-  let AI_BUILDER_TOKEN = process.env.AI_BUILDER_TOKEN;
-  if (!AI_BUILDER_TOKEN && existsSync(AI_BUILDER_TOKEN_FILE)) {
-    try {
-      const data = JSON.parse(readFileSync(AI_BUILDER_TOKEN_FILE, 'utf-8'));
-      AI_BUILDER_TOKEN = data.token;
-    } catch {}
-  }
-  if (!AI_BUILDER_TOKEN) {
-    throw new Error('AI Builder token not configured');
-  }
-
-  const API_URL = 'https://space.ai-builders.com/backend/v1/audio/transcriptions';
-
-  const formData = new FormData();
-  const blob = new Blob([audioBuffer], { type: 'audio/webm' });
-  formData.append('audio_file', blob, 'recording.webm');
-
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${AI_BUILDER_TOKEN}`
-    },
-    body: formData
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.text;
 }
