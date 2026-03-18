@@ -78,7 +78,7 @@ which claude || which codex || which cline || echo "MISSING: install at least on
 
 ```bash
 # If not already cloned:
-git clone https://github.com/YOUR_USERNAME/remotelab.git ~/code/remotelab
+git clone https://github.com/noTe-Z/remote_lab.git ~/code/remotelab
 cd ~/code/remotelab
 npm install
 npm link   # makes `remotelab` available globally

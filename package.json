@@ -1,17 +1,17 @@
 {
-  "name": "@trmquang93/remotelab",
+  "name": "remotelab",
   "version": "1.1.0",
   "description": "Remote browser access to any CLI dev tool (Claude, Copilot, Codex, Cline and more) via HTTPS",
   "type": "module",
   "license": "MIT",
-  "author": "trmquang93",
-  "homepage": "https://github.com/trmquang93/remotelab#readme",
+  "author": "noTe-Z",
+  "homepage": "https://github.com/noTe-Z/remote_lab#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/trmquang93/remotelab.git"
+    "url": "git+https://github.com/noTe-Z/remote_lab.git"
   },
   "bugs": {
-    "url": "https://github.com/trmquang93/remotelab/issues"
+    "url": "https://github.com/noTe-Z/remote_lab/issues"
   },
   "keywords": [
     "claude",

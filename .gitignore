@@ -7,6 +7,10 @@ credentials.txt
 # Claude Code local settings (contains personal paths)
 .claude/
 
+# Personal notes (not for public)
+notes/
+LEARN.md
+
 # macOS
 .DS_Store
 ._*
