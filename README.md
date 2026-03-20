@@ -192,8 +192,10 @@ When you click "Initialize" in the Files panel, RemoteLab creates:
 ├── USER.md        # User preferences and communication style
 ├── logs/
 │   └── YYYY-MM-DD.md  # Daily conversation logs
-└── notes/
-    └── topic.md   # Topic-specific notes
+├── notes/
+│   └── topic.md   # Topic-specific notes
+└── knowledge/
+    └── topic.md   # Curated knowledge from conversations
 ```
 
 ### Usage

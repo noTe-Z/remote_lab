@@ -255,6 +255,7 @@ ASSISTANT_DIR="USER_PROVIDED_PATH"
 mkdir -p "$ASSISTANT_DIR"
 mkdir -p "$ASSISTANT_DIR/logs"
 mkdir -p "$ASSISTANT_DIR/notes"
+mkdir -p "$ASSISTANT_DIR/knowledge"
 
 # Create default files if they don't exist
 if [ ! -f "$ASSISTANT_DIR/CLAUDE.md" ]; then
@@ -270,9 +271,14 @@ After each conversation, consider:
 2. Whether to update user preferences in USER.md
 3. Whether to add long-term memories to MEMORY.md
 4. Whether to create topic-specific notes in notes/
+5. Whether to save curated knowledge to knowledge/ (for refined, reusable content)
 
 ## Session Start Protocol
 At the start of each session, read MEMORY.md and USER.md for context.
+
+## Knowledge vs Notes
+- **notes/**: Quick captures, rough drafts, temporary thoughts
+- **knowledge/**: Refined, structured, reusable knowledge (concepts, guides, references)
 EOF
 fi
 
@@ -305,7 +311,8 @@ $ASSISTANT_DIR/
 ├── USER.md        # User preferences
 ├── logs/          # Daily conversation logs
 │   └── YYYY-MM-DD.md
-└── notes/         # Topic-specific notes
+├── notes/         # Topic-specific notes
+└── knowledge/     # Curated knowledge from conversations
 ```
 
 ---
