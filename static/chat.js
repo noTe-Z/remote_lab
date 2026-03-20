@@ -1228,7 +1228,8 @@
     const formData = new FormData();
     formData.append("audio", blob, "recording.webm");
 
-    // Show processing state
+    // Show processing state (remove retry class if present)
+    voiceBtn.classList.remove("retry");
     voiceBtn.classList.add("processing");
     voiceBtn.textContent = "";
 
@@ -1238,6 +1239,12 @@
         body: formData
       });
       const data = await res.json();
+
+      // Check HTTP status first
+      if (!res.ok) {
+        throw new Error(data.error || `Server error: ${res.status}`);
+      }
+
       if (data.text) {
         // Clear any cached retry blob on success
         pendingRetryBlob = null;
@@ -1248,7 +1255,7 @@
         msgInput.focus();
 
         // Show success
-        voiceBtn.classList.remove("processing", "retry");
+        voiceBtn.classList.remove("processing");
         voiceBtn.classList.add("success");
         voiceBtn.textContent = "✓";
         voiceBtn.title = "Voice input";
@@ -1266,7 +1273,7 @@
       pendingRetryBlob = blob;
 
       // Show retry state
-      voiceBtn.classList.remove("processing");
+      voiceBtn.classList.remove("processing", "success");
       voiceBtn.classList.add("retry");
       voiceBtn.textContent = "↻";
       voiceBtn.title = "Tap to retry";

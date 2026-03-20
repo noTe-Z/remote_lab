@@ -35,15 +35,13 @@ function generateId() {
 }
 
 /**
- * Get today's inbox items.
- * @returns {Array} Items for today, sorted newest first
+ * Get all inbox items.
+ * Items are persisted until manually deleted.
+ * @returns {Array} All items, sorted newest first
  */
 export function getTodayInbox() {
-  const today = new Date().toISOString().slice(0, 10);
   const items = loadInbox();
-  return items
-    .filter(item => item.date === today)
-    .sort((a, b) => new Date(b.created) - new Date(a.created));
+  return items.sort((a, b) => new Date(b.created) - new Date(a.created));
 }
 
 /**
