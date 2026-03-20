@@ -139,7 +139,7 @@ async function runSummary(sessionMeta, onRename) {
     'Write a JSON object with exactly these fields:',
     '- "background": One sentence — what is this session working on overall? Update if this turn changes the focus.',
     '- "lastAction": One sentence — the single most important thing that just happened.',
-    isDefaultName ? '- "title": 2-5 words — a short descriptive title for this session (e.g. "Fix auth bug", "Add dark mode", "Refactor API layer"). No quotes around the title.' : '',
+    isDefaultName ? '- "title": 2-5 words — a short descriptive title for this session. IMPORTANT: Use the SAME LANGUAGE as the user input. If the user wrote in Chinese, respond in Chinese. If in English, respond in English. Keep technical terms (e.g., "memory", "API", "WebSocket") in their original form. No quotes around the title.' : '',
     '',
     'Respond with ONLY valid JSON. No markdown, no explanation.',
   ].filter(l => l !== null && l !== '').join('\n');
