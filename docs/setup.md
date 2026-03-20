@@ -225,7 +225,92 @@ echo "Transcription API configured successfully."
 
 ---
 
-## Phase 6: Create service definitions
+## Phase 6: [HUMAN] Configure Personal Assistant Directory
+
+> **Stop here. Ask the user about their assistant directory.**
+
+Tell the user:
+
+> "RemoteLab includes a Personal Assistant feature that maintains persistent memory across sessions. It stores your memories, daily logs, and notes in a dedicated directory."
+>
+> "Where would you like to store your assistant data?"
+>
+> "Options:"
+> - "Press Enter for default: `~/Development/assistant`"
+> - "Or type a custom path (e.g., `~/my-assistant`, `~/Documents/assistant`)"
+> - "Or type 'skip' to disable this feature for now"
+
+After the user responds:
+
+```bash
+# If user chose default or pressed Enter:
+ASSISTANT_DIR="$HOME/Development/assistant"
+
+# If user provided custom path (expand ~ if present):
+ASSISTANT_DIR="USER_PROVIDED_PATH"
+
+# If user said 'skip', skip this phase entirely.
+
+# Create the directory structure
+mkdir -p "$ASSISTANT_DIR"
+mkdir -p "$ASSISTANT_DIR/logs"
+mkdir -p "$ASSISTANT_DIR/notes"
+
+# Create default files if they don't exist
+if [ ! -f "$ASSISTANT_DIR/CLAUDE.md" ]; then
+  cat > "$ASSISTANT_DIR/CLAUDE.md" << 'EOF'
+# Personal Assistant Rules
+
+## Identity
+You are the user's personal assistant, focused on helping with development tasks and thought collection.
+
+## Session End Protocol
+After each conversation, consider:
+1. Whether to log key insights to logs/YYYY-MM-DD.md
+2. Whether to update user preferences in USER.md
+3. Whether to add long-term memories to MEMORY.md
+4. Whether to create topic-specific notes in notes/
+
+## Session Start Protocol
+At the start of each session, read MEMORY.md and USER.md for context.
+EOF
+fi
+
+if [ ! -f "$ASSISTANT_DIR/MEMORY.md" ]; then
+  echo "# Long-term Memory" > "$ASSISTANT_DIR/MEMORY.md"
+  echo "" >> "$ASSISTANT_DIR/MEMORY.md"
+  echo "Important insights, conclusions, and preferences across sessions." >> "$ASSISTANT_DIR/MEMORY.md"
+  echo "" >> "$ASSISTANT_DIR/MEMORY.md"
+fi
+
+if [ ! -f "$ASSISTANT_DIR/USER.md" ]; then
+  echo "# User Profile" > "$ASSISTANT_DIR/USER.md"
+  echo "" >> "$ASSISTANT_DIR/USER.md"
+  echo "Interests, habits, and communication style." >> "$ASSISTANT_DIR/USER.md"
+  echo "" >> "$ASSISTANT_DIR/USER.md"
+fi
+
+# Set environment variable for the session
+echo "export ASSISTANT_DIR=\"$ASSISTANT_DIR\"" >> ~/.zshrc 2>/dev/null || \
+echo "export ASSISTANT_DIR=\"$ASSISTANT_DIR\"" >> ~/.bashrc 2>/dev/null || true
+
+echo "Assistant directory configured at: $ASSISTANT_DIR"
+```
+
+**Directory Structure Created:**
+```
+$ASSISTANT_DIR/
+├── CLAUDE.md      # Instructions for Claude
+├── MEMORY.md      # Long-term memories
+├── USER.md        # User preferences
+├── logs/          # Daily conversation logs
+│   └── YYYY-MM-DD.md
+└── notes/         # Topic-specific notes
+```
+
+---
+
+## Phase 7: Create service definitions
 
 > **AI can execute this automatically.** All paths must be absolute.
 
@@ -345,7 +430,7 @@ loginctl enable-linger $USER
 
 ---
 
-## Phase 7: Start & verify
+## Phase 8: Start & verify
 
 > **AI can execute this automatically.**
 
@@ -383,7 +468,7 @@ tail -5 ~/.local/share/remotelab/logs/chat-server.log
 
 ---
 
-## Phase 8: [HUMAN] First login
+## Phase 9: [HUMAN] First login
 
 > **Stop here. Tell the user their access URL.**
 

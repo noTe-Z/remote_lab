@@ -158,6 +158,56 @@ remotelab --help               Show help
 | `LISTEN_PORT` | `7681` | Auth proxy port |
 | `SESSION_EXPIRY` | `86400000` | Cookie lifetime in ms (24h) |
 | `SECURE_COOKIES` | `1` | Set `0` for localhost without HTTPS |
+| `ASSISTANT_DIR` | `~/Development/assistant` | Personal assistant directory for memory/knowledge |
+
+## Personal Assistant Directory
+
+RemoteLab includes a **Personal Assistant** feature that maintains persistent memory across sessions. When enabled, you can:
+
+- Store long-term memories and insights
+- Keep daily logs of conversations
+- Save notes on specific topics
+- Track user preferences and patterns
+
+### Setting Up
+
+By default, the assistant directory is `~/Development/assistant`. You can customize this:
+
+```bash
+# Set a custom location
+export ASSISTANT_DIR=~/my-assistant
+
+# Or add to your shell profile
+echo 'export ASSISTANT_DIR=~/my-assistant' >> ~/.zshrc
+```
+
+### Directory Structure
+
+When you click "Initialize" in the Files panel, RemoteLab creates:
+
+```
+~/Development/assistant/
+├── CLAUDE.md      # Instructions for Claude (auto-generated)
+├── MEMORY.md      # Long-term memories and insights
+├── USER.md        # User preferences and communication style
+├── logs/
+│   └── YYYY-MM-DD.md  # Daily conversation logs
+└── notes/
+    └── topic.md   # Topic-specific notes
+```
+
+### Usage
+
+1. Open RemoteLab in your browser
+2. Click the "Files" tab in the sidebar
+3. Click "Initialize" to create the directory structure
+4. Create a session in your assistant directory
+5. Use the "Save to Memory" button after conversations to persist insights
+
+The system will automatically:
+- Generate daily logs of your conversations
+- Mark sessions that may contain save-worthy insights
+- Provide quick access to your memory files
 
 ## File locations
 
