@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { homedir } from 'os';
 import { CHAT_SESSIONS_FILE, CHAT_IMAGES_DIR } from '../lib/config.mjs';
 import { spawnTool } from './process-runner.mjs';
@@ -10,7 +10,18 @@ import { triggerSummary, removeSidebarEntry } from './summarizer.mjs';
 import { sendCompletionPush } from './push.mjs';
 import { parseSkill } from './skills.mjs';
 
-const ASSISTANT_DIR = join(homedir(), 'Development', 'assistant');
+// Read assistantDir from environment variable (set via setup.md Phase 6)
+function getAssistantDir() {
+  const envDir = process.env.ASSISTANT_DIR;
+  if (envDir) {
+    return envDir.startsWith('~')
+      ? join(homedir(), envDir.slice(1))
+      : envDir;
+  }
+  // Default fallback
+  return join(homedir(), 'Development', 'assistant');
+}
+const ASSISTANT_DIR = getAssistantDir();
 
 const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
 

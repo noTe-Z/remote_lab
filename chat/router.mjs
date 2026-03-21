@@ -26,7 +26,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const chatTemplatePath = join(__dirname, '..', 'templates', 'chat.html');
 const loginTemplatePath = join(__dirname, '..', 'templates', 'login.html');
 const staticDir = join(__dirname, '..', 'static');
-const ASSISTANT_DIR = join(homedir(), 'Development', 'assistant');
+
+// Read assistantDir from environment variable (set via setup.md Phase 6)
+function getAssistantDir() {
+  const envDir = process.env.ASSISTANT_DIR;
+  if (envDir) {
+    return envDir.startsWith('~')
+      ? join(homedir(), envDir.slice(1))
+      : envDir;
+  }
+  // Default fallback
+  return join(homedir(), 'Development', 'assistant');
+}
+const ASSISTANT_DIR = getAssistantDir();
 
 const staticMimeTypes = {
   'manifest.json': 'application/manifest+json',
@@ -72,6 +84,18 @@ export async function handleRequest(req, res) {
       const sessionToken = generateToken();
       sessions.set(sessionToken, { expiry: Date.now() + SESSION_EXPIRY });
       saveAuthSessions();
+
+      // Auto-create assistant folder session if no sessions exist
+      const existingSessions = listSessions();
+      if (existingSessions.length === 0 && existsSync(ASSISTANT_DIR)) {
+        try {
+          createSession(ASSISTANT_DIR, 'claude', 'Assistant');
+          console.log('[setup] Auto-created assistant session');
+        } catch (err) {
+          console.error('[setup] Failed to create assistant session:', err);
+        }
+      }
+
       res.writeHead(302, { 'Location': '/', 'Set-Cookie': setCookie(sessionToken) });
       res.end();
     } else {
@@ -105,6 +129,18 @@ export async function handleRequest(req, res) {
       const sessionToken = generateToken();
       sessions.set(sessionToken, { expiry: Date.now() + SESSION_EXPIRY });
       saveAuthSessions();
+
+      // Auto-create assistant folder session if no sessions exist
+      const existingSessions = listSessions();
+      if (existingSessions.length === 0 && existsSync(ASSISTANT_DIR)) {
+        try {
+          createSession(ASSISTANT_DIR, 'claude', 'Assistant');
+          console.log('[setup] Auto-created assistant session');
+        } catch (err) {
+          console.error('[setup] Failed to create assistant session:', err);
+        }
+      }
+
       res.writeHead(302, { 'Location': '/', 'Set-Cookie': setCookie(sessionToken) });
     } else {
       recordFailedAttempt(ip);
@@ -136,6 +172,13 @@ export async function handleRequest(req, res) {
     if (token) { sessions.delete(token); saveAuthSessions(); }
     res.writeHead(302, { 'Location': '/login', 'Set-Cookie': clearCookie() });
     res.end();
+    return;
+  }
+
+  // Health check endpoint (for tunnel/monitoring)
+  if (pathname === '/health' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
     return;
   }
 
@@ -254,9 +297,7 @@ export async function handleRequest(req, res) {
   // GET /api/config - return client-side config
   if (pathname === '/api/config' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      assistantDir: process.env.ASSISTANT_DIR || null
-    }));
+    res.end(JSON.stringify({ assistantDir: ASSISTANT_DIR }));
     return;
   }
 

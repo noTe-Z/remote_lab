@@ -334,7 +334,15 @@
       scheduleReconnect();
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
+      // Try to reconnect after a short delay
+      setTimeout(() => {
+        if (ws && ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+        }
+      }, 1000);
+    };
   }
 
   function scheduleReconnect() {
@@ -760,11 +768,15 @@
       const shortFolder = folder.replace(/^\/Users\/[^/]+/, "~");
       const folderName = shortFolder.split("/").pop() || shortFolder;
 
+      // Check if this is the assistant folder
+      const isAssistantFolder = folder === ASSISTANT_DIR;
+      const folderIcon = isAssistantFolder ? '✦ ' : '';
+
       const header = document.createElement("div");
       header.className =
-        "folder-group-header" + (collapsedFolders[folder] ? " collapsed" : "");
+        "folder-group-header" + (collapsedFolders[folder] ? " collapsed" : "") + (isAssistantFolder ? " assistant-folder" : "");
       header.innerHTML = `<span class="folder-chevron">&#9660;</span>
-        <span class="folder-name" title="${esc(shortFolder)}">${esc(folderName)}</span>
+        <span class="folder-name" title="${esc(shortFolder)}">${folderIcon}${esc(folderName)}</span>
         <span class="folder-count">${folderSessions.length}</span>
         <button class="folder-add-btn" title="New session">+</button>`;
       header.addEventListener("click", (e) => {
@@ -948,25 +960,26 @@
     renderSessionList();
   }
 
-  // Click header to go back to inbox
+  // Click header title to go back to inbox/landing page
   headerTitle.addEventListener("click", () => {
+    // Always detach from current session and show inbox
     if (currentSessionId) {
-      // Detach from current session
-      currentSessionId = null;
-      clearMessages();
-      emptyState.style.display = "";
-      msgInput.placeholder = "Add to inbox...";
-      headerTitle.textContent = "RemoteLab Chat";
-      imgBtn.disabled = false;  // Allow image upload for inbox
-      voiceBtn.disabled = false;  // Allow voice input for inbox
-      inlineToolSelect.disabled = true;
-      thinkingToggle.disabled = true;
-      compactBtn.style.display = "none";
-      saveMemoryBtn.style.display = "none";
-      contextTokens.style.display = "none";
-      renderSessionList();
-      loadInbox();
+      wsSend({ action: "detach" });
     }
+    currentSessionId = null;
+    clearMessages();
+    emptyState.style.display = "";
+    msgInput.placeholder = "Add to inbox...";
+    headerTitle.textContent = "RemoteLab Chat";
+    imgBtn.disabled = false;  // Allow image upload for inbox
+    voiceBtn.disabled = false;  // Allow voice input for inbox
+    inlineToolSelect.disabled = true;
+    thinkingToggle.disabled = true;
+    compactBtn.style.display = "none";
+    saveMemoryBtn.style.display = "none";
+    contextTokens.style.display = "none";
+    renderSessionList();
+    loadInbox();
   });
   headerTitle.style.cursor = "pointer";
 
@@ -1845,12 +1858,21 @@
 
     // Load folders from sessions
     const folders = [...new Set(sessions.map(s => s.folder).filter(Boolean))];
+
     inboxFolderSelect.innerHTML = "";
-    for (const folder of folders) {
+    if (folders.length === 0) {
+      // No sessions yet, show a placeholder message
       const opt = document.createElement("option");
-      opt.value = folder;
-      opt.textContent = folder.split("/").pop();
+      opt.value = "";
+      opt.textContent = "Create a session first";
       inboxFolderSelect.appendChild(opt);
+    } else {
+      for (const folder of folders) {
+        const opt = document.createElement("option");
+        opt.value = folder;
+        opt.textContent = folder.split("/").pop();
+        inboxFolderSelect.appendChild(opt);
+      }
     }
 
     // Load tools
@@ -1924,10 +1946,59 @@
   });
 
   // ---- Init ----
+  // First check if server is ready
+  async function checkServerReady() {
+    try {
+      const res = await fetch("/health");
+      if (res.ok) {
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  // Show loading state if server not ready
+  async function initApp() {
+    const ready = await checkServerReady();
+    if (!ready) {
+      // Server not ready, show message and retry
+      messagesInner.innerHTML = `
+        <div class="empty-state">
+          <div class="inbox-container">
+            <div class="inbox-header">
+              <h2>Starting up...</h2>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 12px;">
+              The server is starting. This may take a few seconds.
+            </p>
+            <button id="retryBtn" style="margin-top: 16px; padding: 10px 20px; background: var(--text); color: var(--bg); border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">
+              Retry Now
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById("retryBtn").addEventListener("click", () => location.reload());
+      // Auto-retry after 3 seconds
+      setTimeout(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          location.reload();
+        }
+      }, 3000);
+      return false;
+    }
+    return true;
+  }
+
   initResponsiveLayout();
   loadInlineTools();
   loadSkills();
-  connect();
+
+  // Wait for server ready before connecting
+  initApp().then((ready) => {
+    if (ready) {
+      connect();
+    }
+  });
 
   // Enable input in empty state for inbox
   msgInput.disabled = false;

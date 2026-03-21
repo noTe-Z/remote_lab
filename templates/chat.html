@@ -58,6 +58,18 @@ body {
   flex-shrink: 0;
 }
 .header h1 { font-size: 15px; font-weight: 600; flex: 1; color: var(--text); }
+.header-title-clickable {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.header-title-clickable:hover {
+  opacity: 0.7;
+}
+.header-title-clickable::after {
+  content: ' ↩';
+  opacity: 0.3;
+  font-size: 12px;
+}
 .header-btn {
   background: none; border: none; color: var(--text-secondary);
   font-size: 16px; cursor: pointer; padding: 6px; border-radius: 6px;
@@ -245,6 +257,8 @@ body {
   padding: 1px 6px; border-radius: 10px;
 }
 .folder-group-header.collapsed + .folder-group-items { display: none; }
+.folder-group-header.assistant-folder { background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), transparent); }
+.folder-group-header.assistant-folder .folder-name { color: var(--primary); font-weight: 600; }
 .folder-add-btn {
   background: var(--bg-tertiary); border: 1px solid var(--border);
   color: var(--text-secondary); cursor: pointer;
@@ -835,7 +849,7 @@ body {
 <!-- Header -->
 <div class="header">
   <button class="header-btn" id="menuBtn" title="Sessions">&#9776;</button>
-  <h1 id="headerTitle">RemoteLab Chat</h1>
+  <h1 id="headerTitle" class="header-title-clickable">RemoteLab Chat</h1>
   <span class="status-dot" id="statusDot"></span>
   <span id="statusText">disconnected</span>
   <span id="contextTokens" style="display:none"></span>

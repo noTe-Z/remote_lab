@@ -819,7 +819,19 @@ if [[ "$OS_TYPE" == "macos" ]]; then
     if [[ "$USE_CLOUDFLARE" == true ]]; then
         launchctl load "$HOME/Library/LaunchAgents/com.cloudflared.tunnel.plist"
     fi
-    sleep 3
+
+    # Wait for chat-server to be ready
+    print_info "Waiting for chat-server to be ready..."
+    for i in {1..30}; do
+        if curl -s http://127.0.0.1:7690/health > /dev/null 2>&1; then
+            print_success "chat-server is ready"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            print_warning "chat-server not responding after 30 seconds"
+        fi
+        sleep 1
+    done
 
     service_pid() { launchctl list | awk -v svc="$1" '$3 == svc && $1 ~ /^[0-9]+$/ {print $1}'; }
     CHATSERVER_PID=$(service_pid "com.chatserver.claude")
@@ -849,7 +861,19 @@ else
         systemctl --user enable remotelab-tunnel.service 2>/dev/null || true
         systemctl --user start remotelab-tunnel.service
     fi
-    sleep 3
+
+    # Wait for chat-server to be ready
+    print_info "Waiting for chat-server to be ready..."
+    for i in {1..30}; do
+        if curl -s http://127.0.0.1:7690/health > /dev/null 2>&1; then
+            print_success "chat-server is ready"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            print_warning "chat-server not responding after 30 seconds"
+        fi
+        sleep 1
+    done
 
     if systemctl --user is-active --quiet remotelab-chat.service; then
         print_success "chat-server running"
