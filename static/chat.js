@@ -500,8 +500,14 @@
         </div>
       `;
     }
-    emptyEl.style.display = "";  // Reset display (may have been set to "none")
-    messagesInner.innerHTML = "";
+
+    // Force show the element
+    emptyEl.style.display = "flex";
+
+    // Clear and re-add - use remove() instead of innerHTML for better mobile compatibility
+    while (messagesInner.firstChild) {
+      messagesInner.removeChild(messagesInner.firstChild);
+    }
     messagesInner.appendChild(emptyEl);
     inThinkingBlock = false;
     currentThinkingBlock = null;
@@ -514,7 +520,11 @@
   }
 
   function renderEvent(evt, autoScroll) {
-    if (emptyState.parentNode === messagesInner) emptyState.remove();
+    // Remove empty state if present (re-query in case it was recreated)
+    const currentEmptyState = document.getElementById("emptyState");
+    if (currentEmptyState && currentEmptyState.parentNode === messagesInner) {
+      currentEmptyState.remove();
+    }
 
     const shouldScroll =
       autoScroll &&
@@ -955,8 +965,9 @@
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
 
-    // Hide inbox, show normal chat
-    emptyState.style.display = "none";
+    // Hide inbox, show normal chat (re-query in case it was recreated)
+    const currentEmptyState = document.getElementById("emptyState");
+    if (currentEmptyState) currentEmptyState.style.display = "none";
     msgInput.placeholder = "Message...";
 
     const displayName =
@@ -1786,10 +1797,12 @@
       const res = await fetch("/api/inbox");
       const data = await res.json();
       inboxItems = data.items || [];
-      renderInbox();
     } catch (err) {
       console.error("Failed to load inbox:", err);
+      inboxItems = [];
     }
+    // Always render inbox, even on error (will show empty state)
+    renderInbox();
   }
 
   function renderInbox() {
