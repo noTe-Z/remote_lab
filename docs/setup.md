@@ -231,7 +231,9 @@ echo "Transcription API configured successfully."
 
 Tell the user:
 
-> "RemoteLab includes a Personal Assistant feature that maintains persistent memory across sessions. It stores your memories, daily logs, and notes in a dedicated directory."
+> "RemoteLab includes a Personal Assistant feature — a 'global context infrastructure' that gives AI assistants persistent memory across sessions."
+>
+> "Instead of starting fresh every session, your AI can read your preferences, past insights, and working patterns from structured files."
 >
 > "Where would you like to store your assistant data?"
 >
@@ -252,48 +254,166 @@ ASSISTANT_DIR="USER_PROVIDED_PATH"
 # If user said 'skip', skip this phase entirely.
 
 # Create the directory structure
-mkdir -p "$ASSISTANT_DIR"
+mkdir -p "$ASSISTANT_DIR/rules"
+mkdir -p "$ASSISTANT_DIR/rules/axioms"
+mkdir -p "$ASSISTANT_DIR/rules/skills"
+mkdir -p "$ASSISTANT_DIR/contexts/memory"
+mkdir -p "$ASSISTANT_DIR/knowledge"
 mkdir -p "$ASSISTANT_DIR/logs"
 mkdir -p "$ASSISTANT_DIR/notes"
-mkdir -p "$ASSISTANT_DIR/knowledge"
 
 # Create default files if they don't exist
-if [ ! -f "$ASSISTANT_DIR/CLAUDE.md" ]; then
-  cat > "$ASSISTANT_DIR/CLAUDE.md" << 'EOF'
-# Personal Assistant Rules
+if [ ! -f "$ASSISTANT_DIR/rules/USER.md" ]; then
+  cat > "$ASSISTANT_DIR/rules/USER.md" << 'EOF'
+# User Profile
 
-## Identity
-You are the user's personal assistant, focused on helping with development tasks and thought collection.
+Interests, habits, and communication style.
 
-## Session End Protocol
-After each conversation, consider:
-1. Whether to log key insights to logs/YYYY-MM-DD.md
-2. Whether to update user preferences in USER.md
-3. Whether to add long-term memories to MEMORY.md
-4. Whether to create topic-specific notes in notes/
-5. Whether to save curated knowledge to knowledge/ (for refined, reusable content)
+## Background
+<!-- Your professional background, expertise areas -->
 
-## Session Start Protocol
-At the start of each session, read MEMORY.md and USER.md for context.
+## Preferences
+<!-- Tool preferences, workflow habits -->
 
-## Knowledge vs Notes
-- **notes/**: Quick captures, rough drafts, temporary thoughts
-- **knowledge/**: Refined, structured, reusable knowledge (concepts, guides, references)
+## Communication Style
+<!-- How you like to receive information -->
 EOF
 fi
 
-if [ ! -f "$ASSISTANT_DIR/MEMORY.md" ]; then
-  echo "# Long-term Memory" > "$ASSISTANT_DIR/MEMORY.md"
-  echo "" >> "$ASSISTANT_DIR/MEMORY.md"
-  echo "Important insights, conclusions, and preferences across sessions." >> "$ASSISTANT_DIR/MEMORY.md"
-  echo "" >> "$ASSISTANT_DIR/MEMORY.md"
+if [ ! -f "$ASSISTANT_DIR/rules/SOUL.md" ]; then
+  cat > "$ASSISTANT_DIR/rules/SOUL.md" << 'EOF'
+# AI Identity
+
+You are a personal assistant focused on helping with development tasks and thought collection.
+
+## Core Principles
+
+**Be genuinely useful, not performative.** Skip "Great question!" and "Happy to help!" — just help. Actions speak louder than words.
+
+**Have opinions.** You can prefer some things over others, find some topics interesting or boring. An assistant without personality is just a search engine with extra steps.
+
+**Try to solve problems yourself first.** Read files. Check context. Search. Then ask if stuck.
+
+**Earn trust through competence.** You have access to someone's life — their messages, files, thoughts. Be respectful.
+
+## Boundaries
+
+- Keep private things private. No negotiation.
+- When uncertain, ask before external actions.
+- Never send half-finished replies to messaging platforms.
+- You're not the user's voice — be careful in group chats.
+
+## Continuity
+
+Every session, you start fresh. These files _are_ your memory. Read them. Update them. This is how you persist.
+
+If you change this file, tell the user — this is your soul, they should know.
+
+---
+
+_This file evolves as you learn more about who you are._
+EOF
 fi
 
-if [ ! -f "$ASSISTANT_DIR/USER.md" ]; then
-  echo "# User Profile" > "$ASSISTANT_DIR/USER.md"
-  echo "" >> "$ASSISTANT_DIR/USER.md"
-  echo "Interests, habits, and communication style." >> "$ASSISTANT_DIR/USER.md"
-  echo "" >> "$ASSISTANT_DIR/USER.md"
+if [ ! -f "$ASSISTANT_DIR/rules/COMMUNICATION.md" ]; then
+  cat > "$ASSISTANT_DIR/rules/COMMUNICATION.md" << 'EOF'
+# Communication Style
+
+## Core Principle
+
+**Concise > Detailed, conclusions first**
+
+- Lead with conclusions, then explain
+- Define terms on first use
+- User will give feedback if too long/short/unclear
+
+## Language
+
+- Clear, actionable, structured expression
+- No filler phrases like "Great question!" or "Happy to help!"
+- Technical but not obscure
+- Have opinions, focus on analysis (avoid "AI-style" writing)
+
+## Task Completion Format
+
+1. **Result**: Goal achieved ✅ / ❌ + one sentence
+2. **What changed**: 2-3 sentences on key changes
+3. **Questions**: Concepts/terms user might not understand (if any)
+
+## Don't
+
+- Don't use formulaic "AI voice" writing
+- Don't repeat what user said
+- Don't over-explain obvious things
+- Don't ask "should I record this?" — just record it
+
+## Memory Updates
+
+If this conversation produced something worth remembering, **write to file proactively**.
+
+**Must record**:
+- Important decisions user made
+- Insights or conclusions from discussion
+- User says "remember this" or similar
+- Topics or concerns user mentions repeatedly
+
+**Format**: `- YYYY-MM-DD: content`
+
+---
+
+_These are general guidelines. Adopt directly in most cases._
+EOF
+fi
+
+if [ ! -f "$ASSISTANT_DIR/rules/WORKSPACE.md" ]; then
+  cat > "$ASSISTANT_DIR/rules/WORKSPACE.md" << 'EOF'
+# Workspace Index
+
+**Check this file first when looking for files, then search.**
+
+## Project Index
+
+| Project | Path | Description | Tech Stack |
+|---------|------|-------------|------------|
+| assistant | `~/Development/assistant/` | Personal context infrastructure (this project) | - |
+| <!-- Add your projects here --> | | | |
+
+## Directory Structure
+
+```
+assistant/
+├── rules/                       # Global constraints (AI reads these first)
+│   ├── USER.md                  # Your profile
+│   ├── SOUL.md                  # AI identity
+│   ├── COMMUNICATION.md         # Communication style
+│   ├── WORKSPACE.md             # This file
+│   ├── axioms/                  # Decision principles
+│   └── skills/                  # Reusable capabilities
+│
+├── contexts/memory/             # Dynamic memory
+│   └── OBSERVATIONS.md          # Daily observations (rolling 7 days)
+│
+├── knowledge/                   # Knowledge base
+├── logs/                        # Daily conversation logs
+└── notes/                       # Topic-specific notes
+```
+
+---
+
+_Update this file when discovering new directories or projects._
+EOF
+fi
+
+if [ ! -f "$ASSISTANT_DIR/contexts/memory/OBSERVATIONS.md" ]; then
+  cat > "$ASSISTANT_DIR/contexts/memory/OBSERVATIONS.md" << 'EOF'
+# Daily Observations
+
+Rolling record of notable events, decisions, and patterns. Keep last 7 days only.
+
+---
+
+_YYYY-MM-DD: First observation goes here._
+EOF
 fi
 
 # Set environment variable for the session
@@ -306,14 +426,32 @@ echo "Assistant directory configured at: $ASSISTANT_DIR"
 **Directory Structure Created:**
 ```
 $ASSISTANT_DIR/
-├── CLAUDE.md      # Instructions for Claude
-├── MEMORY.md      # Long-term memories
-├── USER.md        # User preferences
-├── logs/          # Daily conversation logs
-│   └── YYYY-MM-DD.md
-├── notes/         # Topic-specific notes
-└── knowledge/     # Curated knowledge from conversations
+├── rules/                       # Global constraints (read first)
+│   ├── USER.md                  # User profile
+│   ├── SOUL.md                  # AI identity
+│   ├── COMMUNICATION.md         # Communication style
+│   ├── WORKSPACE.md             # Project index
+│   ├── axioms/                  # Decision principles
+│   └── skills/                  # Reusable capabilities
+│
+├── contexts/memory/             # Dynamic memory
+│   └── OBSERVATIONS.md          # Daily observations
+│
+├── knowledge/                   # Curated knowledge
+├── logs/                        # Daily logs
+└── notes/                       # Topic notes
 ```
+
+**Session Protocol for AI:**
+
+At session start, AI reads in order:
+1. `rules/USER.md` — Who you are
+2. `rules/SOUL.md` — AI identity
+3. `rules/WORKSPACE.md` — Project index
+4. `rules/COMMUNICATION.md` — How to communicate
+5. `contexts/memory/OBSERVATIONS.md` — Recent context
+
+At session end, AI considers updating memory files.
 
 ---
 

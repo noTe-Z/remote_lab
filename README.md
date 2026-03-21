@@ -162,23 +162,24 @@ remotelab --help               Show help
 
 ## Personal Assistant Directory
 
-RemoteLab includes a **Personal Assistant** feature that maintains persistent memory across sessions. When enabled, you can:
+RemoteLab includes a **Personal Assistant** feature — a "global context infrastructure" that gives AI assistants persistent memory across sessions. Instead of starting fresh every time, your AI can read your preferences, past insights, and working patterns.
 
-- Store long-term memories and insights
-- Keep daily logs of conversations
-- Save notes on specific topics
-- Track user preferences and patterns
+### The Problem It Solves
+
+Every time you start a new session with Claude Code or similar tools, the AI has no context about:
+- Your communication style and preferences
+- Projects you're working on
+- Decisions you've made and why
+- Insights from previous conversations
+
+This directory solves that by providing structured files that AI reads at session start.
 
 ### Setting Up
 
-By default, the assistant directory is `~/Development/assistant`. You can customize this:
+By default, the assistant directory is `~/Development/assistant`. Customize with:
 
 ```bash
-# Set a custom location
 export ASSISTANT_DIR=~/my-assistant
-
-# Or add to your shell profile
-echo 'export ASSISTANT_DIR=~/my-assistant' >> ~/.zshrc
 ```
 
 ### Directory Structure
@@ -187,15 +188,74 @@ When you click "Initialize" in the Files panel, RemoteLab creates:
 
 ```
 ~/Development/assistant/
-├── CLAUDE.md      # Instructions for Claude (auto-generated)
-├── MEMORY.md      # Long-term memories and insights
-├── USER.md        # User preferences and communication style
-├── logs/
-│   └── YYYY-MM-DD.md  # Daily conversation logs
-├── notes/
-│   └── topic.md   # Topic-specific notes
-└── knowledge/
-    └── topic.md   # Curated knowledge from conversations
+├── rules/                       # Global constraints (AI reads these first)
+│   ├── USER.md                  # Your profile: interests, habits, preferences
+│   ├── SOUL.md                  # AI identity: how it should behave
+│   ├── COMMUNICATION.md         # Communication style guidelines
+│   ├── WORKSPACE.md             # Project index and file routing
+│   ├── axioms/                  # Decision principles from your experience
+│   └── skills/                  # Reusable capabilities
+│
+├── contexts/memory/             # Dynamic memory
+│   └── OBSERVATIONS.md          # Daily observations (rolling 7 days)
+│
+├── knowledge/                   # Knowledge base (Obsidian-compatible)
+│   └── topic/                   # Curated knowledge from conversations
+│
+├── logs/                        # Daily conversation logs
+│   └── YYYY-MM-DD.md
+│
+└── notes/                       # Topic-specific notes
+```
+
+### How AI Uses This
+
+**Session Start Protocol** — AI reads in order:
+1. `USER.md` — Who you are, how you work
+2. `SOUL.md` — AI's identity and behavior guidelines
+3. `WORKSPACE.md` — Your project index
+4. `COMMUNICATION.md` — How to communicate with you
+5. `OBSERVATIONS.md` — Recent context (last 7 days)
+
+**Session End Protocol** — AI considers:
+- Logging key insights to `logs/YYYY-MM-DD.md`
+- Updating user preferences in `USER.md`
+- Adding long-term memories to `MEMORY.md`
+- Creating topic notes in `notes/`
+- Saving curated knowledge to `knowledge/`
+
+### Template Files
+
+The setup creates default templates that work well for most users. Key files:
+
+**USER.md** — Your profile:
+```markdown
+# User Profile
+
+Interests, habits, and communication style.
+```
+
+**SOUL.md** — AI identity:
+```markdown
+# AI Identity
+
+You are a personal assistant focused on helping with development tasks.
+- Be genuinely useful, not performative
+- Have opinions — prefer some things over others
+- Try to solve problems yourself before asking
+- You're a guest in someone's life — be respectful
+
+This file evolves as the AI learns more about its role.
+```
+
+**COMMUNICATION.md** — Style guidelines:
+```markdown
+# Communication Style
+
+- Be concise, lead with conclusions
+- Use clear, actionable, structured language
+- Don't use filler phrases like "Great question!"
+- Technical but not obscure
 ```
 
 ### Usage
@@ -204,12 +264,12 @@ When you click "Initialize" in the Files panel, RemoteLab creates:
 2. Click the "Files" tab in the sidebar
 3. Click "Initialize" to create the directory structure
 4. Create a session in your assistant directory
-5. Use the "Save to Memory" button after conversations to persist insights
+5. Use "Save to Memory" after conversations to persist insights
 
-The system will automatically:
-- Generate daily logs of your conversations
-- Mark sessions that may contain save-worthy insights
-- Provide quick access to your memory files
+The system automatically:
+- Generates daily logs of conversations
+- Marks sessions that may contain save-worthy insights
+- Provides quick access to memory files
 
 ## File locations
 
