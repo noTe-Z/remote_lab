@@ -481,9 +481,28 @@
   }
 
   function showEmpty() {
+    // Re-query emptyState in case it was modified
+    let emptyEl = document.getElementById("emptyState");
+    if (!emptyEl) {
+      // Recreate emptyState if it doesn't exist
+      emptyEl = document.createElement("div");
+      emptyEl.className = "empty-state";
+      emptyEl.id = "emptyState";
+      emptyEl.innerHTML = `
+        <div class="inbox-container" id="inboxContainer">
+          <div class="inbox-header">
+            <h2>Inbox</h2>
+            <span class="inbox-count" id="inboxCount">0 items</span>
+          </div>
+          <div class="inbox-list" id="inboxList">
+            <div class="inbox-empty">No items yet. Type below to add something.</div>
+          </div>
+        </div>
+      `;
+    }
+    emptyEl.style.display = "";  // Reset display (may have been set to "none")
     messagesInner.innerHTML = "";
-    emptyState.style.display = "";  // Reset display (may have been set to "none")
-    messagesInner.appendChild(emptyState);
+    messagesInner.appendChild(emptyEl);
     inThinkingBlock = false;
     currentThinkingBlock = null;
   }
@@ -1774,15 +1793,23 @@
   }
 
   function renderInbox() {
-    inboxList.innerHTML = "";
-
-    if (inboxItems.length === 0) {
-      inboxList.innerHTML = '<div class="inbox-empty">No items yet. Type below to add something.</div>';
-      inboxCount.textContent = "0 items";
+    // Re-query inboxList in case emptyState was re-attached to DOM
+    const listEl = document.getElementById("inboxList");
+    const countEl = document.getElementById("inboxCount");
+    if (!listEl) {
+      console.error("inboxList not found in DOM");
       return;
     }
 
-    inboxCount.textContent = `${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}`;
+    listEl.innerHTML = "";
+
+    if (inboxItems.length === 0) {
+      listEl.innerHTML = '<div class="inbox-empty">No items yet. Type below to add something.</div>';
+      if (countEl) countEl.textContent = "0 items";
+      return;
+    }
+
+    if (countEl) countEl.textContent = `${inboxItems.length} item${inboxItems.length === 1 ? "" : "s"}`;
 
     for (const item of inboxItems) {
       const div = document.createElement("div");
@@ -1827,7 +1854,7 @@
         }
       });
 
-      inboxList.appendChild(div);
+      listEl.appendChild(div);
     }
   }
 
