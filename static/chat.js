@@ -967,8 +967,7 @@
       wsSend({ action: "detach" });
     }
     currentSessionId = null;
-    clearMessages();
-    emptyState.style.display = "";
+    showEmpty();
     msgInput.placeholder = "Add to inbox...";
     headerTitle.textContent = "RemoteLab Chat";
     imgBtn.disabled = false;  // Allow image upload for inbox
