@@ -482,6 +482,7 @@
 
   function showEmpty() {
     messagesInner.innerHTML = "";
+    emptyState.style.display = "";  // Reset display (may have been set to "none")
     messagesInner.appendChild(emptyState);
     inThinkingBlock = false;
     currentThinkingBlock = null;
