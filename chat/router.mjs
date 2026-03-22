@@ -423,66 +423,55 @@ export async function handleRequest(req, res) {
   // GET /api/files - list files in assistant directory
   if (pathname === '/api/files' && req.method === 'GET') {
     try {
-      const today = new Date().toISOString().slice(0, 10);
       const result = {
         exists: existsSync(ASSISTANT_DIR),
-        files: {},
-        logs: [],
-        notes: []
+        observations: null,
+        axioms: [],
+        skills: []
       };
 
-      // Check main files
-      const mainFiles = ['CLAUDE.md', 'MEMORY.md', 'USER.md'];
-      for (const f of mainFiles) {
-        const fp = join(ASSISTANT_DIR, f);
-        if (existsSync(fp)) {
-          result.files[f] = {
-            exists: true,
-            size: statSync(fp).size,
-            mtime: statSync(fp).mtime
-          };
-        } else {
-          result.files[f] = { exists: false };
-        }
+      // Check observations file
+      const observationsPath = join(ASSISTANT_DIR, 'contexts', 'memory', 'OBSERVATIONS.md');
+      if (existsSync(observationsPath)) {
+        result.observations = {
+          exists: true,
+          size: statSync(observationsPath).size,
+          mtime: statSync(observationsPath).mtime
+        };
+      } else {
+        result.observations = { exists: false };
       }
 
-      // Check today's log
-      const todayLogPath = join(ASSISTANT_DIR, 'logs', `${today}.md`);
-      result.todayLog = {
-        exists: existsSync(todayLogPath),
-        date: today
-      };
-
-      // List logs directory
-      const logsDir = join(ASSISTANT_DIR, 'logs');
-      if (existsSync(logsDir) && statSync(logsDir).isDirectory()) {
-        const entries = readdirSync(logsDir);
+      // List axioms directory
+      const axiomsDir = join(ASSISTANT_DIR, 'rules', 'axioms');
+      if (existsSync(axiomsDir) && statSync(axiomsDir).isDirectory()) {
+        const entries = readdirSync(axiomsDir);
         for (const e of entries) {
           if (e.endsWith('.md')) {
-            const fp = join(logsDir, e);
-            result.logs.push({
+            const fp = join(axiomsDir, e);
+            result.axioms.push({
               name: e,
               mtime: statSync(fp).mtime
             });
           }
         }
-        result.logs.sort((a, b) => b.name.localeCompare(a.name)); // newest first
+        result.axioms.sort((a, b) => a.name.localeCompare(b.name));
       }
 
-      // List notes directory
-      const notesDir = join(ASSISTANT_DIR, 'notes');
-      if (existsSync(notesDir) && statSync(notesDir).isDirectory()) {
-        const entries = readdirSync(notesDir);
+      // List skills directory
+      const skillsDir = join(ASSISTANT_DIR, 'rules', 'skills');
+      if (existsSync(skillsDir) && statSync(skillsDir).isDirectory()) {
+        const entries = readdirSync(skillsDir);
         for (const e of entries) {
           if (e.endsWith('.md')) {
-            const fp = join(notesDir, e);
-            result.notes.push({
+            const fp = join(skillsDir, e);
+            result.skills.push({
               name: e,
               mtime: statSync(fp).mtime
             });
           }
         }
-        result.notes.sort((a, b) => a.name.localeCompare(b.name));
+        result.skills.sort((a, b) => a.name.localeCompare(b.name));
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -513,17 +502,24 @@ export async function handleRequest(req, res) {
 
     // Determine file path based on type
     let filePath;
-    if (fileParam.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
-      // It's a log file
-      filePath = join(ASSISTANT_DIR, 'logs', fileParam);
+    if (fileParam === 'OBSERVATIONS.md') {
+      // Observations file
+      filePath = join(ASSISTANT_DIR, 'contexts', 'memory', fileParam);
     } else {
-      // Main file or note
-      const mainFiles = ['CLAUDE.md', 'MEMORY.md', 'USER.md'];
-      if (mainFiles.includes(fileParam)) {
-        filePath = join(ASSISTANT_DIR, fileParam);
+      // Check if it's in axioms directory
+      const axiomsPath = join(ASSISTANT_DIR, 'rules', 'axioms', fileParam);
+      if (existsSync(axiomsPath)) {
+        filePath = axiomsPath;
       } else {
-        // It's a note
-        filePath = join(ASSISTANT_DIR, 'notes', fileParam);
+        // Check if it's in skills directory
+        const skillsPath = join(ASSISTANT_DIR, 'rules', 'skills', fileParam);
+        if (existsSync(skillsPath)) {
+          filePath = skillsPath;
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'File not found' }));
+          return;
+        }
       }
     }
 

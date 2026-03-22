@@ -48,9 +48,12 @@ export function getTodayInbox() {
  * Add a new inbox item.
  * @param {string} content - The user's original text
  * @param {string} title - Optional title (defaults to first line of content)
+ * @param {object} options - Optional metadata
+ * @param {string} options.type - Item type: 'user', 'observer', 'reflector'
+ * @param {object} options.metadata - Additional metadata for AI-initiated items
  * @returns {object} The created item
  */
-export function addInboxItem(content, title = null) {
+export function addInboxItem(content, title = null, options = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const items = loadInbox();
 
@@ -63,7 +66,13 @@ export function addInboxItem(content, title = null) {
     content,
     created: new Date().toISOString(),
     date: today,
+    type: options.type || 'user',
   };
+
+  // Add metadata for AI-initiated items
+  if (options.metadata) {
+    item.metadata = options.metadata;
+  }
 
   items.push(item);
   saveInbox(items);

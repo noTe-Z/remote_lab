@@ -33,7 +33,6 @@
   const cancelBtn = document.getElementById("cancelBtn");
   const contextTokens = document.getElementById("contextTokens");
   const compactBtn = document.getElementById("compactBtn");
-  const saveMemoryBtn = document.getElementById("saveMemoryBtn");
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
   const tabFiles = document.getElementById("tabFiles");
@@ -86,8 +85,7 @@
   let inboxItems = [];
   let selectedInboxItem = null;
 
-  // Assistant directory for memory status indicator
-  // Fetched from server config (set via ASSISTANT_DIR env var)
+  // Assistant directory for observer/reflector inbox items
   let ASSISTANT_DIR = null;
   fetch('/api/config')
     .then(r => r.json())
@@ -760,7 +758,6 @@
       contextTokens.textContent = formatTokens(inputTokens);
       contextTokens.style.display = "";
       compactBtn.style.display = "";
-      saveMemoryBtn.style.display = "";
     }
   }
 
@@ -798,15 +795,11 @@
       const shortFolder = folder.replace(/^\/Users\/[^/]+/, "~");
       const folderName = shortFolder.split("/").pop() || shortFolder;
 
-      // Check if this is the assistant folder
-      const isAssistantFolder = folder === ASSISTANT_DIR;
-      const folderIcon = isAssistantFolder ? '✦ ' : '';
-
       const header = document.createElement("div");
       header.className =
-        "folder-group-header" + (collapsedFolders[folder] ? " collapsed" : "") + (isAssistantFolder ? " assistant-folder" : "");
+        "folder-group-header" + (collapsedFolders[folder] ? " collapsed" : "");
       header.innerHTML = `<span class="folder-chevron">&#9660;</span>
-        <span class="folder-name" title="${esc(shortFolder)}">${folderIcon}${esc(folderName)}</span>
+        <span class="folder-name" title="${esc(shortFolder)}">${esc(folderName)}</span>
         <span class="folder-count">${folderSessions.length}</span>
         <button class="folder-add-btn" title="New session">+</button>`;
       header.addEventListener("click", (e) => {
@@ -847,7 +840,14 @@
       const items = document.createElement("div");
       items.className = "folder-group-items";
 
-      for (const s of folderSessions) {
+      // Sort sessions by creation time, newest first
+      const sortedSessions = [...folderSessions].sort((a, b) => {
+        const aTime = a.created ? new Date(a.created).getTime() : 0;
+        const bTime = b.created ? new Date(b.created).getTime() : 0;
+        return bTime - aTime;
+      });
+
+      for (const s of sortedSessions) {
         const div = document.createElement("div");
         div.className =
           "session-item" + (s.id === currentSessionId ? " active" : "");
@@ -857,10 +857,6 @@
         if (s.name && s.tool) metaParts.push(s.tool);
         if (s.status === "running") metaParts.push("●&nbsp;running");
 
-        // Pending memory indicator for assistant directory sessions
-        const isAssistantSession = s.folder === ASSISTANT_DIR;
-        const showPendingMemory = isAssistantSession && s.pendingMemory;
-
         const metaHtml = finishedUnread.has(s.id)
           ? `<span class="status-done">● done</span>`
           : s.status === "running"
@@ -869,28 +865,15 @@
               ? `<span>${esc(s.tool)}</span>`
               : "";
 
-        const pendingMemoryDot = showPendingMemory
-          ? `<span class="pending-memory-dot" title="Click to dismiss, or save to memory" data-id="${s.id}">●</span>`
-          : "";
-
         div.innerHTML = `
           <div class="session-item-info">
-            <div class="session-item-name">${esc(displayName)}${pendingMemoryDot}</div>
+            <div class="session-item-name">${esc(displayName)}</div>
             <div class="session-item-meta">${metaHtml}</div>
           </div>
           <div class="session-item-actions">
             <button class="session-action-btn rename" title="Rename" data-id="${s.id}">&#9998;</button>
             <button class="session-action-btn del" title="Delete" data-id="${s.id}">&times;</button>
           </div>`;
-
-        // Handle pending memory dot click
-        const pendingDot = div.querySelector(".pending-memory-dot");
-        if (pendingDot) {
-          pendingDot.addEventListener("click", (e) => {
-            e.stopPropagation();
-            dismissPendingMemory(s.id);
-          });
-        }
 
         div.addEventListener("click", (e) => {
           if (
@@ -960,7 +943,6 @@
     currentTokens = 0;
     contextTokens.style.display = "none";
     compactBtn.style.display = "none";
-    saveMemoryBtn.style.display = "none";
     finishedUnread.delete(id);
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
@@ -1006,33 +988,11 @@
     inlineToolSelect.disabled = true;
     thinkingToggle.disabled = true;
     compactBtn.style.display = "none";
-    saveMemoryBtn.style.display = "none";
     contextTokens.style.display = "none";
     renderSessionList();
     loadInbox();
   });
   headerTitle.style.cursor = "pointer";
-
-  // Dismiss pending memory indicator (user chose to ignore)
-  async function dismissPendingMemory(sessionId) {
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/memory-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ignored: true }),
-      });
-      if (res.ok) {
-        // Update local state
-        const idx = sessions.findIndex((s) => s.id === sessionId);
-        if (idx >= 0) {
-          sessions[idx].pendingMemory = false;
-          renderSessionList();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to dismiss pending memory:", err);
-    }
-  }
 
   // ---- Sidebar ----
   function openSidebar() {
@@ -1363,48 +1323,6 @@
     wsSend({ action: "compact" });
   });
 
-  // ---- Save to Memory ----
-  saveMemoryBtn.addEventListener("click", async () => {
-    if (!currentSessionId) return;
-    if (saveMemoryBtn.classList.contains("saving")) return;
-
-    saveMemoryBtn.classList.add("saving");
-    try {
-      const res = await fetch("/api/files/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: currentSessionId }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        // Clear pending memory status
-        const statusRes = await fetch(`/api/sessions/${currentSessionId}/memory-status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ saved: true }),
-        });
-        if (statusRes.ok) {
-          const idx = sessions.findIndex((s) => s.id === currentSessionId);
-          if (idx >= 0) sessions[idx].pendingMemory = false;
-        }
-        // Show brief success feedback
-        const origTitle = saveMemoryBtn.innerHTML;
-        saveMemoryBtn.innerHTML = "&#10003;";
-        saveMemoryBtn.style.color = "var(--success)";
-        setTimeout(() => {
-          saveMemoryBtn.innerHTML = origTitle;
-          saveMemoryBtn.style.color = "";
-        }, 1500);
-      } else {
-        alert("Failed to save: " + (data.error || "unknown error"));
-      }
-    } catch (err) {
-      alert("Failed to save: " + err.message);
-    } finally {
-      saveMemoryBtn.classList.remove("saving");
-    }
-  });
-
   sendBtn.addEventListener("click", sendMessage);
   msgInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
@@ -1499,73 +1417,50 @@
 
       let html = "";
 
-      // Main files section
+      // Observations
       html += `<div class="files-section">`;
-      html += `<div class="files-section-header">Memory</div>`;
-      if (data.files["MEMORY.md"]?.exists) {
-        html += `<div class="files-item" data-file="MEMORY.md">
-          <span class="files-item-icon">&#128196;</span>
-          <span class="files-item-name">MEMORY.md</span>
-        </div>`;
-      }
-      html += `</div>`;
-
-      // About Me
-      html += `<div class="files-section">`;
-      html += `<div class="files-section-header">About Me</div>`;
-      if (data.files["USER.md"]?.exists) {
-        html += `<div class="files-item" data-file="USER.md">
-          <span class="files-item-icon">&#128100;</span>
-          <span class="files-item-name">USER.md</span>
-        </div>`;
-      }
-      html += `</div>`;
-
-      // Today
-      html += `<div class="files-section">`;
-      html += `<div class="files-section-header">Today</div>`;
-      const todayDate = new Date().toISOString().slice(0, 10);
-      if (data.todayLog?.exists) {
-        html += `<div class="files-item" data-file="${todayDate}.md">
-          <span class="files-item-icon">&#128197;</span>
-          <span class="files-item-name">${todayDate}</span>
+      html += `<div class="files-section-header">Observations</div>`;
+      if (data.observations?.exists) {
+        html += `<div class="files-item" data-file="OBSERVATIONS.md">
+          <span class="files-item-icon">&#128065;</span>
+          <span class="files-item-name">OBSERVATIONS.md</span>
         </div>`;
       } else {
         html += `<div class="files-item" style="opacity:0.5;cursor:default">
-          <span class="files-item-icon">&#128197;</span>
-          <span class="files-item-name">${todayDate} (empty)</span>
+          <span class="files-item-icon">&#128065;</span>
+          <span class="files-item-name">No observations yet</span>
         </div>`;
       }
       html += `</div>`;
 
-      // All Logs
+      // Axioms
       html += `<div class="files-section">`;
-      html += `<div class="files-section-header">All Logs (${data.logs.length})</div>`;
-      for (const log of data.logs.slice(0, 10)) {
-        html += `<div class="files-item" data-file="${log.name}">
-          <span class="files-item-icon">&#128196;</span>
-          <span class="files-item-name">${log.name.replace(".md", "")}</span>
+      html += `<div class="files-section-header">Axioms (${data.axioms.length})</div>`;
+      for (const axiom of data.axioms) {
+        html += `<div class="files-item" data-file="${axiom.name}">
+          <span class="files-item-icon">&#9881;</span>
+          <span class="files-item-name">${axiom.name.replace(".md", "")}</span>
         </div>`;
       }
-      if (data.logs.length > 10) {
-        html += `<div class="files-item" style="opacity:0.6;font-size:11px;cursor:default">
-          <span class="files-item-name">+ ${data.logs.length - 10} more</span>
-        </div>`;
-      }
-      html += `</div>`;
-
-      // Notes
-      html += `<div class="files-section">`;
-      html += `<div class="files-section-header">Notes (${data.notes.length})</div>`;
-      for (const note of data.notes) {
-        html += `<div class="files-item" data-file="${note.name}">
-          <span class="files-item-icon">&#128221;</span>
-          <span class="files-item-name">${note.name.replace(".md", "")}</span>
-        </div>`;
-      }
-      if (data.notes.length === 0) {
+      if (data.axioms.length === 0) {
         html += `<div class="files-item" style="opacity:0.5;cursor:default">
-          <span class="files-item-name">No notes yet</span>
+          <span class="files-item-name">No axioms yet</span>
+        </div>`;
+      }
+      html += `</div>`;
+
+      // Skills
+      html += `<div class="files-section">`;
+      html += `<div class="files-section-header">Skills (${data.skills.length})</div>`;
+      for (const skill of data.skills) {
+        html += `<div class="files-item" data-file="${skill.name}">
+          <span class="files-item-icon">&#128736;</span>
+          <span class="files-item-name">${skill.name.replace(".md", "")}</span>
+        </div>`;
+      }
+      if (data.skills.length === 0) {
+        html += `<div class="files-item" style="opacity:0.5;cursor:default">
+          <span class="files-item-name">No skills yet</span>
         </div>`;
       }
       html += `</div>`;
@@ -1826,8 +1721,11 @@
 
     for (const item of inboxItems) {
       const div = document.createElement("div");
-      div.className = "inbox-item";
+      // Add type class for Observer/Reflector
+      const typeClass = item.type || "user";
+      div.className = `inbox-item ${typeClass}`;
       div.dataset.id = item.id;
+      div.dataset.type = typeClass;
 
       const timeStr = new Date(item.created).toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -1838,9 +1736,14 @@
       // Preview: first 60 chars of content
       const preview = item.content.slice(0, 60) + (item.content.length > 60 ? "..." : "");
 
+      // Type label for Observer/Reflector
+      const typeLabel = (item.type === "observer" || item.type === "reflector")
+        ? `<span class="inbox-item-type">${item.type}</span>`
+        : "";
+
       div.innerHTML = `
         <div class="inbox-item-content">
-          <div class="inbox-item-title">${escapeHtml(item.title)}</div>
+          <div class="inbox-item-title">${escapeHtml(item.title)}${typeLabel}</div>
           <div class="inbox-item-preview">${escapeHtml(preview)}</div>
         </div>
         <span class="inbox-item-time">${timeStr}</span>
@@ -1894,9 +1797,37 @@
 
   async function openInboxActionModal(item) {
     selectedInboxItem = item;
-    inboxActionContent.textContent = item.title;
 
-    // Load folders from sessions
+    // Get modal elements
+    const titleEl = document.getElementById("inboxActionTitle");
+    const contentEl = document.getElementById("inboxActionContent");
+    const aiContentEl = document.getElementById("inboxAIContent");
+    const folderSectionEl = document.getElementById("inboxFolderSection");
+
+    const itemType = item.type || "user";
+    const isAIInitiated = itemType === "observer" || itemType === "reflector";
+
+    // Set title based on type
+    if (isAIInitiated) {
+      titleEl.textContent = itemType === "observer" ? "Observer Report" : "Reflector Report";
+    } else {
+      titleEl.textContent = "Start Session from Inbox";
+    }
+
+    // Show content
+    contentEl.textContent = item.title;
+
+    // Show AI content for Observer/Reflector
+    if (isAIInitiated) {
+      aiContentEl.style.display = "block";
+      aiContentEl.textContent = item.content;
+      folderSectionEl.style.display = "none";
+    } else {
+      aiContentEl.style.display = "none";
+      folderSectionEl.style.display = "block";
+    }
+
+    // Load folders from sessions (for user type)
     const folders = [...new Set(sessions.map(s => s.folder).filter(Boolean))];
 
     inboxFolderSelect.innerHTML = "";
@@ -1941,11 +1872,26 @@
 
   inboxActionCreate.addEventListener("click", async () => {
     if (!selectedInboxItem) return;
-    const folder = inboxFolderSelect.value;
-    const tool = inboxToolSelect.value || "claude";
-    if (!folder) {
-      alert("Please select a folder");
-      return;
+
+    const itemType = selectedInboxItem.type || "user";
+    const isAIInitiated = itemType === "observer" || itemType === "reflector";
+
+    // For Observer/Reflector, use assistant directory
+    let folder, tool;
+    if (isAIInitiated) {
+      if (!ASSISTANT_DIR) {
+        alert("Assistant directory not configured");
+        return;
+      }
+      folder = ASSISTANT_DIR;
+      tool = "claude";
+    } else {
+      folder = inboxFolderSelect.value;
+      tool = inboxToolSelect.value || "claude";
+      if (!folder) {
+        alert("Please select a folder");
+        return;
+      }
     }
 
     // Create session via WebSocket
@@ -1963,13 +1909,40 @@
       if (msg.type === "session" && msg.session) {
         ws.removeEventListener("message", handler);
 
-        // Attach to session and send the inbox item content
+        // Attach to session
         attachSession(msg.session.id, msg.session);
         wsSend({ action: "list" });
 
         // Send the inbox item content as a message
         setTimeout(() => {
-          const sendMsg = { action: "send", text: selectedInboxItem.content };
+          // Build prompt based on type
+          let textToSend;
+          if (isAIInitiated) {
+            // AI-initiated session: generate appropriate prompt
+            if (itemType === "observer") {
+              textToSend = `我刚刚完成了今天的观察提取。以下是我从对话中提取的观察：
+
+${selectedInboxItem.content}
+
+请帮我：
+1. 检查这些观察是否准确反映了今天的活动
+2. 是否有遗漏的重要内容
+3. 这些观察中哪些值得长期保留`;
+            } else if (itemType === "reflector") {
+              textToSend = `我刚刚完成了每周反思。以下是分析结果：
+
+${selectedInboxItem.content}
+
+请帮我：
+1. 检查 draft/ 目录下的 skill 候选是否合理
+2. 是否需要调整或合并某些 skill
+3. 有什么遗漏或需要补充的`;
+            }
+          } else {
+            textToSend = selectedInboxItem.content;
+          }
+
+          const sendMsg = { action: "send", text: textToSend };
           if (selectedTool) sendMsg.tool = selectedTool;
           sendMsg.thinking = thinkingEnabled;
           wsSend(sendMsg);

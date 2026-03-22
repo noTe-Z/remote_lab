@@ -252,8 +252,6 @@ body {
   padding: 1px 6px; border-radius: 10px;
 }
 .folder-group-header.collapsed + .folder-group-items { display: none; }
-.folder-group-header.assistant-folder { background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), transparent); }
-.folder-group-header.assistant-folder .folder-name { color: var(--primary); font-weight: 600; }
 .folder-add-btn {
   background: var(--bg-tertiary); border: 1px solid var(--border);
   color: var(--text-secondary); cursor: pointer;
@@ -280,17 +278,6 @@ body {
 }
 .session-item-meta .status-running { color: var(--success); }
 .session-item-meta .status-done { color: #3b82f6; }
-.pending-memory-dot {
-  color: #d97706;
-  font-size: 10px;
-  margin-left: 6px;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity 0.15s;
-}
-.pending-memory-dot:hover {
-  opacity: 1;
-}
 .session-item-actions { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
 .session-action-btn {
   background: none; border: none; color: var(--text-muted); cursor: pointer;
@@ -426,6 +413,33 @@ body {
 }
 .inbox-item:hover .inbox-item-delete { opacity: 1; }
 .inbox-item-delete:hover { color: var(--error); background: var(--error-bg); }
+
+/* Observer/Reflector type inbox items */
+.inbox-item.observer {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.inbox-item.observer:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+.inbox-item.reflector {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+.inbox-item.reflector:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+}
+.inbox-item-type {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 4px; margin-left: 8px;
+}
+.inbox-item.observer .inbox-item-type {
+  background: rgba(59, 130, 246, 0.2); color: #3b82f6;
+}
+.inbox-item.reflector .inbox-item-type {
+  background: rgba(139, 92, 246, 0.2); color: #8b5cf6;
+}
+
 .inbox-empty {
   text-align: center; color: var(--text-muted); font-size: 13px;
   padding: 24px 16px;
@@ -682,13 +696,6 @@ body {
   line-height: 1.4; white-space: nowrap; flex-shrink: 0; font-family: inherit;
 }
 .compact-btn:hover { border-color: var(--border-strong); color: var(--text-secondary); }
-.save-memory-btn {
-  background: none; border: 1px solid var(--border); color: var(--text-muted);
-  font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
-  line-height: 1; white-space: nowrap; flex-shrink: 0;
-}
-.save-memory-btn:hover { border-color: var(--border-strong); color: var(--text-secondary); }
-.save-memory-btn.saving { opacity: 0.5; cursor: wait; }
 .input-config-row .img-btn {
   width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border);
   background: transparent; color: var(--text-muted); font-size: 14px;
@@ -849,7 +856,6 @@ body {
   <span id="statusText">disconnected</span>
   <span id="contextTokens" style="display:none"></span>
   <button class="compact-btn" id="compactBtn" style="display:none">Compact</button>
-  <button class="save-memory-btn" id="saveMemoryBtn" style="display:none" title="Save to Memory">&#128190;</button>
 </div>
 
 <div class="app-container">
@@ -950,10 +956,13 @@ body {
 <!-- Inbox Action Modal -->
 <div class="modal-overlay" id="inboxActionModal">
   <div class="modal">
-    <h3>Start Session from Inbox</h3>
+    <h3 id="inboxActionTitle">Start Session from Inbox</h3>
     <p id="inboxActionContent" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></p>
-    <label>Folder</label>
-    <select id="inboxFolderSelect"></select>
+    <div id="inboxAIContent" style="display: none; background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; max-height: 200px; overflow-y: auto; white-space: pre-wrap;"></div>
+    <div id="inboxFolderSection">
+      <label>Folder</label>
+      <select id="inboxFolderSelect"></select>
+    </div>
     <label>Tool</label>
     <select id="inboxToolSelect"></select>
     <div class="modal-actions">
