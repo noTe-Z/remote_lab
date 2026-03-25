@@ -1800,8 +1800,9 @@
 
     // Get modal elements
     const titleEl = document.getElementById("inboxActionTitle");
-    const contentEl = document.getElementById("inboxActionContent");
-    const aiContentEl = document.getElementById("inboxAIContent");
+    const displayEl = document.getElementById("inboxContentDisplay");
+    const editorEl = document.getElementById("inboxContentEditor");
+    const editBtn = document.getElementById("inboxEditBtn");
     const folderSectionEl = document.getElementById("inboxFolderSection");
 
     const itemType = item.type || "user";
@@ -1814,25 +1815,24 @@
       titleEl.textContent = "Start Session from Inbox";
     }
 
-    // Show content
-    contentEl.textContent = item.title;
+    // Show content in display
+    displayEl.textContent = item.content || item.title;
+    editorEl.value = item.content || item.title;
 
-    // Show AI content for Observer/Reflector
-    if (isAIInitiated) {
-      aiContentEl.style.display = "block";
-      aiContentEl.textContent = item.content;
-      folderSectionEl.style.display = "none";
-    } else {
-      aiContentEl.style.display = "none";
-      folderSectionEl.style.display = "block";
-    }
+    // Reset to display mode
+    displayEl.style.display = "block";
+    editorEl.style.display = "none";
+    editBtn.textContent = "Edit";
+    editBtn.dataset.editing = "false";
+
+    // Show/hide folder section based on type
+    folderSectionEl.style.display = isAIInitiated ? "none" : "block";
 
     // Load folders from sessions (for user type)
     const folders = [...new Set(sessions.map(s => s.folder).filter(Boolean))];
 
     inboxFolderSelect.innerHTML = "";
     if (folders.length === 0) {
-      // No sessions yet, show a placeholder message
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "Create a session first";
@@ -1858,20 +1858,116 @@
     inboxActionModal.classList.add("open");
   }
 
+  // Edit button handler
+  const inboxEditBtn = document.getElementById("inboxEditBtn");
+  inboxEditBtn.addEventListener("click", async () => {
+    const displayEl = document.getElementById("inboxContentDisplay");
+    const editorEl = document.getElementById("inboxContentEditor");
+
+    if (inboxEditBtn.dataset.editing === "true") {
+      // Save mode - save changes
+      const newContent = editorEl.value.trim();
+      if (!newContent || !selectedInboxItem) return;
+
+      try {
+        const res = await fetch(`/api/inbox/${selectedInboxItem.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: newContent }),
+        });
+        const data = await res.json();
+        if (data.item) {
+          // Update local state
+          const idx = inboxItems.findIndex(i => i.id === selectedInboxItem.id);
+          if (idx !== -1) {
+            inboxItems[idx] = data.item;
+            selectedInboxItem = data.item;
+          }
+          renderInbox();
+
+          // Switch back to display mode
+          displayEl.textContent = data.item.content;
+          editorEl.style.display = "none";
+          displayEl.style.display = "block";
+          inboxEditBtn.textContent = "Edit";
+          inboxEditBtn.dataset.editing = "false";
+        }
+      } catch (err) {
+        console.error("Failed to update inbox item:", err);
+        alert("Failed to save changes");
+      }
+    } else {
+      // Edit mode - show editor
+      editorEl.value = selectedInboxItem.content || selectedInboxItem.title;
+      displayEl.style.display = "none";
+      editorEl.style.display = "block";
+      editorEl.focus();
+      inboxEditBtn.textContent = "Save";
+      inboxEditBtn.dataset.editing = "true";
+    }
+  });
+
   inboxActionCancel.addEventListener("click", () => {
     inboxActionModal.classList.remove("open");
+    // Reset edit state
+    const displayEl = document.getElementById("inboxContentDisplay");
+    const editorEl = document.getElementById("inboxContentEditor");
+    const editBtn = document.getElementById("inboxEditBtn");
+    if (displayEl) displayEl.style.display = "block";
+    if (editorEl) editorEl.style.display = "none";
+    if (editBtn) {
+      editBtn.textContent = "Edit";
+      editBtn.dataset.editing = "false";
+    }
     selectedInboxItem = null;
   });
 
   inboxActionModal.addEventListener("click", (e) => {
     if (e.target === inboxActionModal) {
       inboxActionModal.classList.remove("open");
+      // Reset edit state
+      const displayEl = document.getElementById("inboxContentDisplay");
+      const editorEl = document.getElementById("inboxContentEditor");
+      const editBtn = document.getElementById("inboxEditBtn");
+      if (displayEl) displayEl.style.display = "block";
+      if (editorEl) editorEl.style.display = "none";
+      if (editBtn) {
+        editBtn.textContent = "Edit";
+        editBtn.dataset.editing = "false";
+      }
       selectedInboxItem = null;
     }
   });
 
   inboxActionCreate.addEventListener("click", async () => {
     if (!selectedInboxItem) return;
+
+    // If in edit mode, save first
+    const editBtn = document.getElementById("inboxEditBtn");
+    const editorEl = document.getElementById("inboxContentEditor");
+    if (editBtn && editBtn.dataset.editing === "true") {
+      const newContent = editorEl.value.trim();
+      if (newContent) {
+        try {
+          const res = await fetch(`/api/inbox/${selectedInboxItem.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: newContent }),
+          });
+          const data = await res.json();
+          if (data.item) {
+            const idx = inboxItems.findIndex(i => i.id === selectedInboxItem.id);
+            if (idx !== -1) {
+              inboxItems[idx] = data.item;
+              selectedInboxItem = data.item;
+            }
+            renderInbox();
+          }
+        } catch (err) {
+          console.error("Failed to save inbox item:", err);
+        }
+      }
+    }
 
     const itemType = selectedInboxItem.type || "user";
     const isAIInitiated = itemType === "observer" || itemType === "reflector";

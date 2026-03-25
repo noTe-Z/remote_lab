@@ -12,6 +12,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { addInboxItem } from '../chat/inbox.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -68,6 +69,32 @@ function hasEntryForDate(date) {
   if (!existsSync(CONFIG.observationsPath)) return false;
   const content = readFileSync(CONFIG.observationsPath, 'utf8');
   return content.includes(`Date: ${date}`);
+}
+
+// 提取当天的 observation 内容
+function extractObservationForDate(date) {
+  if (!existsSync(CONFIG.observationsPath)) return null;
+  const content = readFileSync(CONFIG.observationsPath, 'utf8');
+
+  // 找到目标日期的 entry
+  const dateMarker = `Date: ${date}`;
+  const startIndex = content.indexOf(dateMarker);
+  if (startIndex === -1) return null;
+
+  // 找到下一个日期分隔符或文件结束
+  const nextSeparator = content.indexOf('\n---\n\nDate:', startIndex);
+  const endIndex = nextSeparator === -1 ? content.length : nextSeparator;
+
+  const entry = content.slice(startIndex, endIndex).trim();
+
+  // 提取标题（第一行 High 或 Medium）
+  const lines = entry.split('\n').filter(l => l.trim());
+  const firstSubstantive = lines.find(l => l.startsWith('🔴') || l.startsWith('🟡'));
+  const title = firstSubstantive
+    ? firstSubstantive.replace(/^[🔴🟡]\s*(High|Medium):\s*/, '').slice(0, 50)
+    : `Observations for ${date}`;
+
+  return { title, content: entry };
 }
 
 // 主函数
@@ -128,6 +155,18 @@ async function main() {
   });
 
   proc.on('exit', (code) => {
+    if (code === 0) {
+      // Agent 成功完成，同步到 inbox
+      const obs = extractObservationForDate(date);
+      if (obs) {
+        try {
+          addInboxItem(obs.content, obs.title, { type: 'observer' });
+          console.log(`\nSynced observation to inbox for ${date}`);
+        } catch (err) {
+          console.error('Failed to sync to inbox:', err.message);
+        }
+      }
+    }
     process.exit(code || 0);
   });
 }

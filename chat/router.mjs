@@ -14,7 +14,7 @@ import { getSidebarState } from './summarizer.mjs';
 import { getPublicKey, addSubscription } from './push.mjs';
 import { readBody } from '../lib/utils.mjs';
 import { getAvailableSkills } from './skills.mjs';
-import { getTodayInbox, addInboxItem, deleteInboxItem, getInboxItem } from './inbox.mjs';
+import { getTodayInbox, addInboxItem, deleteInboxItem, getInboxItem, updateInboxItem, syncInboxToFile } from './inbox.mjs';
 import { transcribe } from '../lib/transcription.mjs';
 import {
   getClientIp, isRateLimited, recordFailedAttempt, clearFailedAttempts,
@@ -39,6 +39,7 @@ function getAssistantDir() {
   return join(homedir(), 'Development', 'assistant');
 }
 const ASSISTANT_DIR = getAssistantDir();
+const INBOX_MD_PATH = join(ASSISTANT_DIR, 'contexts', 'memory', 'INBOX.md');
 
 const staticMimeTypes = {
   'manifest.json': 'application/manifest+json',
@@ -745,6 +746,8 @@ You are the user's personal assistant, focused on helping with development tasks
         return;
       }
       const item = addInboxItem(content, title);
+      // Sync to INBOX.md
+      syncInboxToFile(INBOX_MD_PATH);
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ item }));
     } catch {
@@ -759,11 +762,42 @@ You are the user's personal assistant, focused on helping with development tasks
     const id = pathname.split('/').pop();
     const ok = deleteInboxItem(id);
     if (ok) {
+      // Sync to INBOX.md
+      syncInboxToFile(INBOX_MD_PATH);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Item not found' }));
+    }
+    return;
+  }
+
+  // PUT /api/inbox/:id - update an inbox item
+  if (pathname.startsWith('/api/inbox/') && req.method === 'PUT') {
+    const id = pathname.split('/').pop();
+    let body;
+    try { body = await readBody(req, 65536); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
+    try {
+      const { content, title } = JSON.parse(body);
+      const updated = updateInboxItem(id, { content, title });
+      if (updated) {
+        // Sync to INBOX.md
+        syncInboxToFile(INBOX_MD_PATH);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ item: updated }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Item not found' }));
+      }
+    } catch (err) {
+      console.error('Error updating inbox item:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to update item' }));
     }
     return;
   }

@@ -955,10 +955,15 @@ body {
 
 <!-- Inbox Action Modal -->
 <div class="modal-overlay" id="inboxActionModal">
-  <div class="modal">
-    <h3 id="inboxActionTitle">Start Session from Inbox</h3>
-    <p id="inboxActionContent" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></p>
-    <div id="inboxAIContent" style="display: none; background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; max-height: 200px; overflow-y: auto; white-space: pre-wrap;"></div>
+  <div class="modal" style="max-width: 480px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+      <h3 id="inboxActionTitle" style="margin: 0;">Start Session from Inbox</h3>
+      <button id="inboxEditBtn" style="background: none; border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; padding: 4px 10px; border-radius: 5px; cursor: pointer;">Edit</button>
+    </div>
+    <!-- Content display (read-only) -->
+    <div id="inboxContentDisplay" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5;"></div>
+    <!-- Content editor -->
+    <textarea id="inboxContentEditor" style="display: none; width: 100%; min-height: 150px; max-height: 250px; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 16px;" placeholder="Content..."></textarea>
     <div id="inboxFolderSection">
       <label>Folder</label>
       <select id="inboxFolderSelect"></select>
