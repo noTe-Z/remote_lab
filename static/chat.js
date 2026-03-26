@@ -33,6 +33,7 @@
   const cancelBtn = document.getElementById("cancelBtn");
   const contextTokens = document.getElementById("contextTokens");
   const compactBtn = document.getElementById("compactBtn");
+  const pinBtn = document.getElementById("pinBtn");
   const tabSessions = document.getElementById("tabSessions");
   const tabProgress = document.getElementById("tabProgress");
   const tabFiles = document.getElementById("tabFiles");
@@ -395,6 +396,10 @@
           const idx = sessions.findIndex((s) => s.id === msg.session.id);
           if (idx >= 0) sessions[idx] = msg.session;
           else sessions.push(msg.session);
+          // Update pin button state if this is the current session
+          if (msg.session.id === currentSessionId) {
+            pinBtn.classList.toggle("active", !!msg.session.pendingFollowUp);
+          }
           renderSessionList();
         }
         break;
@@ -865,9 +870,13 @@
               ? `<span>${esc(s.tool)}</span>`
               : "";
 
+        const pendingDot = s.pendingFollowUp
+          ? `<span class="session-pending-dot" title="Pending follow-up"></span>`
+          : "";
+
         div.innerHTML = `
           <div class="session-item-info">
-            <div class="session-item-name">${esc(displayName)}</div>
+            <div class="session-item-name">${pendingDot}${esc(displayName)}</div>
             <div class="session-item-meta">${metaHtml}</div>
           </div>
           <div class="session-item-actions">
@@ -943,6 +952,8 @@
     currentTokens = 0;
     contextTokens.style.display = "none";
     compactBtn.style.display = "none";
+    pinBtn.style.display = "";
+    pinBtn.classList.toggle("active", !!session?.pendingFollowUp);
     finishedUnread.delete(id);
     clearMessages();
     wsSend({ action: "attach", sessionId: id });
@@ -988,6 +999,7 @@
     inlineToolSelect.disabled = true;
     thinkingToggle.disabled = true;
     compactBtn.style.display = "none";
+    pinBtn.style.display = "none";
     contextTokens.style.display = "none";
     renderSessionList();
     loadInbox();
@@ -1321,6 +1333,11 @@
   compactBtn.addEventListener("click", () => {
     if (!currentSessionId) return;
     wsSend({ action: "compact" });
+  });
+
+  pinBtn.addEventListener("click", () => {
+    if (!currentSessionId) return;
+    wsSend({ action: "followUp" });
   });
 
   sendBtn.addEventListener("click", sendMessage);

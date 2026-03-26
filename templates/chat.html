@@ -72,6 +72,8 @@ body {
   width: 32px; height: 32px;
 }
 .header-btn:hover { background: var(--bg-tertiary); color: var(--text); }
+.header-btn.pin-btn.active { color: var(--warning); }
+.header-btn.pin-btn.active:hover { color: var(--text); }
 .status-dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted);
   display: inline-block; flex-shrink: 0;
@@ -287,6 +289,11 @@ body {
 .session-item:hover .session-action-btn { opacity: 1; }
 .session-action-btn:hover { background: var(--bg-tertiary); color: var(--text); }
 .session-action-btn.del:hover { background: var(--error-bg); color: var(--error); }
+.session-pending-dot {
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
+  flex-shrink: 0; margin-right: 4px; vertical-align: middle;
+}
 
 /* Inline rename input */
 .session-rename-input {
@@ -856,6 +863,7 @@ body {
   <span id="statusText">disconnected</span>
   <span id="contextTokens" style="display:none"></span>
   <button class="compact-btn" id="compactBtn" style="display:none">Compact</button>
+  <button class="header-btn pin-btn" id="pinBtn" title="Mark as pending follow-up" style="display:none">&#128204;</button>
 </div>
 
 <div class="app-container">
@@ -978,6 +986,6 @@ body {
 </div>
 
 <script src="/marked.min.js" nonce="{{NONCE}}"></script>
-<script src="/chat.js?v=3" nonce="{{NONCE}}"></script>
+<script src="/chat.js?v=5" nonce="{{NONCE}}"></script>
 </body>
 </html>

@@ -9,6 +9,7 @@ import { messageEvent, statusEvent } from './normalizer.mjs';
 import { triggerSummary, removeSidebarEntry } from './summarizer.mjs';
 import { sendCompletionPush } from './push.mjs';
 import { parseSkill } from './skills.mjs';
+import { addPendingSession, removePendingSession, updatePendingSessionName } from './pending-sessions.mjs';
 
 // Read assistantDir from environment variable (set via setup.md Phase 6)
 function getAssistantDir() {
@@ -115,6 +116,12 @@ export function deleteSession(id) {
   const metas = loadSessionsMeta();
   const idx = metas.findIndex(m => m.id === id);
   if (idx === -1) return false;
+
+  // Remove from pending sessions if marked
+  if (metas[idx].pendingFollowUp) {
+    removePendingSession(id);
+  }
+
   metas.splice(idx, 1);
   saveSessionsMeta(metas);
   removeSidebarEntry(id);
@@ -127,6 +134,12 @@ export function renameSession(id, name) {
   if (idx === -1) return null;
   metas[idx].name = name;
   saveSessionsMeta(metas);
+
+  // Update name in pending sessions if marked
+  if (metas[idx].pendingFollowUp) {
+    updatePendingSessionName(id, name);
+  }
+
   const live = liveSessions.get(id);
   const updated = { ...metas[idx], status: live ? live.status : 'idle' };
   broadcast(id, { type: 'session', session: updated });
@@ -143,6 +156,34 @@ export function markMemoryStatus(id, status) {
   if (idx === -1) return null;
   metas[idx].pendingMemory = status;
   saveSessionsMeta(metas);
+  const live = liveSessions.get(id);
+  const updated = { ...metas[idx], status: live ? live.status : 'idle' };
+  broadcast(id, { type: 'session', session: updated });
+  return updated;
+}
+
+/**
+ * Toggle session's "pending follow-up" status.
+ * When marked, the session is added to PENDING_SESSIONS.md for AI context.
+ */
+export function toggleFollowUp(id) {
+  const metas = loadSessionsMeta();
+  const idx = metas.findIndex(m => m.id === id);
+  if (idx === -1) return null;
+
+  const current = metas[idx].pendingFollowUp;
+  const newValue = !current;
+  metas[idx].pendingFollowUp = newValue;
+  metas[idx].updatedAt = new Date().toISOString().slice(0, 10);
+  saveSessionsMeta(metas);
+
+  // Sync with PENDING_SESSIONS.md
+  if (newValue) {
+    addPendingSession(metas[idx]);
+  } else {
+    removePendingSession(id);
+  }
+
   const live = liveSessions.get(id);
   const updated = { ...metas[idx], status: live ? live.status : 'idle' };
   broadcast(id, { type: 'session', session: updated });

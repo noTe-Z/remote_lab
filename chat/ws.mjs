@@ -5,7 +5,7 @@ import { isAuthenticated, parseCookies } from '../lib/auth.mjs';
 import {
   createSession, deleteSession, getSession, listSessions,
   subscribe, unsubscribe, sendMessage, cancelSession, getHistory,
-  renameSession, compactSession,
+  renameSession, compactSession, toggleFollowUp,
 } from './session-manager.mjs';
 
 /**
@@ -182,6 +182,21 @@ function handleMessage(ws, msg, ctx) {
         return;
       }
       compactSession(sessionId);
+      break;
+    }
+
+    case 'followUp': {
+      const sessionId = ctx.getAttached();
+      if (!sessionId) {
+        wsSend(ws, { type: 'error', message: 'Not attached to a session' });
+        return;
+      }
+      const updated = toggleFollowUp(sessionId);
+      if (updated) {
+        wsSend(ws, { type: 'session', session: updated });
+      } else {
+        wsSend(ws, { type: 'error', message: 'Session not found' });
+      }
       break;
     }
 
